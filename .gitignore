@@ -1,4 +1,4 @@
-# Source:
+# Original Source:
 # https://github.com/github/gitignore/blob/master/Global/Eclipse.gitignore
 .metadata
 bin/
@@ -52,3 +52,8 @@ local.properties
 .cache-main
 .scala_dependencies
 .worksheet
+
+# Others
+*.coff
+*.o
+*.a
