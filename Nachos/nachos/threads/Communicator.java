@@ -37,8 +37,8 @@ public class Communicator {
 			burner = false;
 		toTransfer = word;	// set message to pass
 		spoke = true;	// flag other speakers to sleep
+		waiting.release();	// release lock (lines 40,41 - possible reorder?)
 		waitQueue.wake();	// hopefully wake a listener
-		waiting.release();	// release lock 
 		// NOTE: order of messages conveyed is NOT deterministic and actually unlikely to occur sequentially
 	}
 
@@ -59,8 +59,8 @@ public class Communicator {
 			burner = false;
 		int transferring = toTransfer;
 		spoke = false;
-		waitQueue.wake();
-		waiting.release();
+		waiting.release(); // order?
+		waitQueue.wake(); // order?
 		return transferring;
 	}
 
