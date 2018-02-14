@@ -28,7 +28,7 @@ import nachos.machine.*;
  * </pre></blockquote>
  */
 public class KThread {
-	public long wakeTime; // used in Alarm.java
+	
 	/**
 	 * Get the current thread.
 	 *
