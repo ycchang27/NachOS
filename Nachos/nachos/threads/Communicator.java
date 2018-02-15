@@ -2,8 +2,6 @@ package nachos.threads;
 
 import nachos.machine.*;
 
-import java.util.Queue;
-
 /**
  * A <i>communicator</i> allows threads to synchronously exchange 32-bit
  * messages. Multiple threads can be waiting to <i>speak</i>,
@@ -16,7 +14,11 @@ public class Communicator {
 	 * Allocate a new communicator.
 	 */
 	public Communicator() {
-		this.burner = true;
+	
+	this.waiting = new Lock();
+	this.speak = new Condition2(waiting);
+	this.listen = new Condition2(waiting);
+	this.spoke = false;
 	}
 
 	/**
@@ -30,22 +32,20 @@ public class Communicator {
 	 * @param	word	the integer to transfer.
 	 */
 	public void speak(int word) {
-		// wait until listen() is called on the same communicator object
-		waiting.acquire(); // acquire lock
-		speaker++; 
+		this.waiting.acquire(); // acquire lock
 		
-
-		if (!burner)	 // burner is false if communicator hasn't been used before
+		//if (!burner)	// burner is false if communicator hasn't been used before
 			while (spoke)	// spoke is true if another thread previously called speak(int)
 			{
-				waitQueue.sleep(); // so sleep until that thread is done
+				this.listen.wakeAll(); //wake the listeners
+				this.speak.sleep(); // so sleep until that thread is done
 			}
-		else
-			burner = false;
-		toTransfer = word;	// set message to pass
-		spoke = true;	// flag other speakers to sleep
-		waiting.release();	// release lock (lines 40,41 - possible reorder?)
-		waitQueue.wake();	// hopefully wake a listener
+		//else
+			//burner = false;
+		this.toTransfer = word;	// set message to pass
+		this.spoke = true;	// flag other speakers to sleep
+		this.speak.wake();	// hopefully wake a listener
+		this.waiting.release();	// release lock 
 		// NOTE: order of messages conveyed is NOT deterministic and actually unlikely to occur sequentially
 	}
 
@@ -56,29 +56,27 @@ public class Communicator {
 	 * @return	the integer transferred.
 	 */    
 	public int listen() {
-		waiting.acquire();
-		if (!burner)
+		this.waiting.acquire();
+		//if (!burner)
 			while (!spoke)
 			{
-				waitQueue.sleep();
+				this.listen.sleep();
 			}
-		else
-			burner = false;
-		int transferring = toTransfer;
+		//else
+			///burner = false;
+		int transferring = this.toTransfer;
 		spoke = false;
-		waiting.release(); // order?
-		waitQueue.wake(); // order?
+		//waitQueue.wake();
+		this.speak.wakeAll();
+		
+		this.waiting.release();
 		return transferring;
 	}
-
-	private int speaker = 0;
-	private int listener = 0;
-
-	private Condition2 sCondition;
-
+//variable definitions
 	private Lock waiting;
-	private Condition2 waitQueue = new Condition2(waiting);
-	private int toTransfer = 0;
-	private boolean spoke, burner = true;
-	public Queue<Communicator> commQueue;
+	private Condition2 speak;
+	private Condition2 listen;
+
+	private int toTransfer;
+	private boolean spoke;
 }
