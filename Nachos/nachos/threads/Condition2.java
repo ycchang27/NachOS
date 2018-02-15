@@ -62,7 +62,6 @@ public class Condition2 {
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 		
 		boolean status = Machine.interrupt().disable(); 
-		KThread readyme;
 		
 		if (!waitQueue.isEmpty())
 		{
@@ -82,7 +81,6 @@ public class Condition2 {
 		
 		boolean status = Machine.interrupt().disable(); 
 		
-		KThread readyme;
 		while (!waitQueue.isEmpty())
 		{
 			wake();
