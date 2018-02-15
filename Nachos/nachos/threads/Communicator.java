@@ -1,6 +1,9 @@
 package nachos.threads;
 
 import nachos.machine.*;
+import java.util.Queue;
+import java.util.LinkedList;
+
 
 /**
  * A <i>communicator</i> allows threads to synchronously exchange 32-bit
@@ -31,20 +34,22 @@ public class Communicator {
 	 *
 	 * @param	word	the integer to transfer.
 	 */
-	public void speak(int word) {
+	public void speak(int word) 
+	{
 		this.waiting.acquire(); // acquire lock
 		
-		//if (!burner)	// burner is false if communicator hasn't been used before
-			while (spoke)	// spoke is true if another thread previously called speak(int)
-			{
-				this.listen.wakeAll(); //wake the listeners
-				this.speak.sleep(); // so sleep until that thread is done
-			}
+		while (spoke)	// spoke is true if another thread previously called speak(int)
+		{
+			this.listen.wakeAll(); //wake the listeners
+			this.speak.sleep(); // so sleep until that thread is done
+		}
+
 		//else
-			//burner = false;
+		//burner = false;
 		this.toTransfer = word;	// set message to pass
 		this.spoke = true;	// flag other speakers to sleep
-		this.speak.wake();	// hopefully wake a listener
+		this.listen.wakeAll();
+		this.speak.sleep();	// hopefully wake a listener
 		this.waiting.release();	// release lock 
 		// NOTE: order of messages conveyed is NOT deterministic and actually unlikely to occur sequentially
 	}
@@ -55,20 +60,19 @@ public class Communicator {
 	 *
 	 * @return	the integer transferred.
 	 */    
-	public int listen() {
+	public int listen() 
+	{
 		this.waiting.acquire();
-		//if (!burner)
-			while (!spoke)
-			{
-				this.listen.sleep();
-			}
-		//else
-			///burner = false;
+		while (!spoke)
+		{
+			this.listen.sleep();
+		}
+
 		int transferring = this.toTransfer;
+
+		this.speak.wakeAll();
 		spoke = false;
 		//waitQueue.wake();
-		this.speak.wakeAll();
-		
 		this.waiting.release();
 		return transferring;
 	}
