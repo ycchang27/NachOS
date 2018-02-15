@@ -51,10 +51,20 @@ public class Alarm {
 	 */
 	public void timerInterrupt() {
 		boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
-		while (!set.isEmpty() && Machine.timer().getTime() >= set.first().wakeTime) {
+		while (!set.isEmpty() && Machine.timer().getTime() >= set.first().wakeTime) { // might cause infinite loop?
 			set.first().thread.ready();
 			set.pollFirst();
 		}
+		
+		// possible implementation: (untested, but no compile issues)
+//		for(Pair p : set)
+//		{
+//			if (Machine.timer().getTime() > p.wakeTime)
+//			{
+//				p.thread.ready();
+//				set.remove(p); // ESPECIALLY not sure if this works
+//			}
+//		}
 		Machine.interrupt().restore(intStatus); // re-enable interrupts
 		KThread.currentThread().yield();
 	}

@@ -44,7 +44,7 @@ public class Condition2 {
 		waitQueue.add(KThread.currentThread());
 		KThread.sleep();
 		conditionLock.acquire();
-		Machine.interrupt();
+		Machine.interrupt().restore(status);
 		
 //		Lock waiter = new Lock();
 //		waitQueue.add(waiter);
