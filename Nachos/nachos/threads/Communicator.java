@@ -16,7 +16,7 @@ public class Communicator {
 	 * Allocate a new communicator.
 	 */
 	public Communicator() {
-		this.wordReady = false;
+		this.burner = true;
 	}
 
 	/**
@@ -73,7 +73,7 @@ public class Communicator {
 
 	private int speaker = 0;
 	private int listener = 0;
-	private boolean wordReady = false;
+
 	private Condition2 sCondition;
 
 	private Lock waiting;
