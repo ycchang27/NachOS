@@ -2,16 +2,20 @@ package nachos.threads;
 
 import nachos.machine.*;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.TreeSet;
+import java.util.ListIterator;
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
  * until a certain time.
  */
 public class Alarm {
-	private static final char dbgAlarm = 'a';
 	/**
 	 * Element pair <KThread, long> that the TreeSet stores
 	 */
+	List<Pair> thrds = new ArrayList<Pair>();
+	
 	public class Pair implements Comparable<Pair> {
 		public KThread thread;
 		public long wakeTime;
@@ -29,9 +33,6 @@ public class Alarm {
 		public int compareTo(Pair p) {
 	        return (int)(this.wakeTime - p.wakeTime);
 	    }
-		public String toString() {
-			return thread.toString() + ", " + wakeTime;
-		}
 	}
 	private TreeSet<Pair> set; // A waiting queue to pop when the current time passes a certain time
 	/**
@@ -55,10 +56,8 @@ public class Alarm {
 	 * that should be run.
 	 */
 	public void timerInterrupt() {
-		long time = Machine.timer().getTime();
-		boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
-		while (!set.isEmpty() && time >= set.first().wakeTime) { // might cause infinite loop?
-			Lib.debug(dbgAlarm, "removing Alarm's set thread " +  set.first().thread.toString());
+		/*boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
+		while (!set.isEmpty() && Machine.timer().getTime() >= set.first().wakeTime) { // might cause infinite loop?
 			set.first().thread.ready();
 			set.pollFirst();
 		}
@@ -73,7 +72,57 @@ public class Alarm {
 //			}
 //		}
 		Machine.interrupt().restore(intStatus); // re-enable interrupts
-		KThread.currentThread().yield();
+		KThread.currentThread().yield();*/
+		 Lib.assertTrue(Machine.interrupt().disabled());
+		 List<Pair> getrid = new ArrayList<Pair>();
+		 
+		 
+		// ListIterator<Pair> it = thrds.listIterator();
+		 
+		/* while(it.hasNext())
+		 {
+		 //NOTE: not sure how to iterate a list with while
+			 Pair current = it.next();
+			 
+			 if (current.wakeTime < Machine.timer().getTime())
+			 {
+				 getrid.add(current);
+				 
+			 }
+			 
+		 }
+		 lol nope 
+		 
+		 for (Pair p : thrds)
+		 {
+			 Pair current = p.
+		 }*/
+		 
+		 for (ListIterator<Pair> it = thrds.listIterator(); it.hasNext();)
+		 {
+			 Pair current = it.next();
+			 
+			 //when its time is good 
+			 if (Machine.timer().getTime() > current.wakeTime)
+			 {
+				 //get rid of it
+				 getrid.add(current);
+			 }
+			 
+		 }
+		 
+	//similar thing but now can get the threads ready
+		 for (ListIterator<Pair> it = getrid.listIterator(); it.hasNext();)
+		 {
+			 Pair current = it.next();
+			 
+			current.thread.ready();
+			
+			thrds.remove(current);
+			 
+		 }
+		 
+		 
 	}
 
 	/**
@@ -91,31 +140,13 @@ public class Alarm {
 	 * @see	nachos.machine.Timer#getTime()
 	 */
 	public void waitUntil(long x) {
-		Lib.debug(dbgAlarm, "Enter waitUntil with thread " + KThread.currentThread().toString());
-		
-		boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
-		
-		// insert current thread to the set
-		long wakeTime = Machine.timer().getTime() + x;
-		Pair p = new Pair(KThread.currentThread(), wakeTime);
-		set.add(p);
-		Lib.debug(dbgAlarm, "Ending waitUntil");
-		
-		KThread.sleep(); // sleep the current thread
-		
-		Machine.interrupt().restore(intStatus); // re-enable interrupts
-//		previous implementation
+		// for now, cheat just to get something working (busy waiting is bad)
+		long wakeTime = Machine.timer().getTime() + x; // save to current thread's local variable
+		Pair p = new Pair(KThread.currentThread(), wakeTime); // pair
+		KThread.currentThread().sleep();
+		set.add(p); // add to the TreeSet
 //		while (KThread.currentThread().wakeTime > Machine.timer().getTime()) // check if current thread should wake
 //			KThread.currentThread().yield();	// else sleep
 	}
-	
-	/**
-	 * Tests whether this module is working.
-	 */
-	
-	public static void selfTest() {
-		Lib.debug(dbgAlarm, "Enter Alarm.selfTest");
-		Alarm a = new Alarm();
-		a.waitUntil(100);
-	}
 }
+
