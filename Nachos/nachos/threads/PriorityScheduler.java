@@ -257,5 +257,7 @@ public class PriorityScheduler extends Scheduler {
 	protected KThread thread;
 	/** The priority of the associated thread. */
 	protected int priority;
+	protected int donated; 
+	
     }
 }
