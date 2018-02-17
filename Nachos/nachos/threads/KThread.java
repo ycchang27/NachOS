@@ -296,6 +296,8 @@ public class KThread {
 				joinQueue = ThreadedKernel.scheduler.newThreadQueue(true); // initialize thread queue
 				joinQueue.acquire(this); // all threads in queue waits on this thread
 			}
+			//call function to decrement priority 
+			
 			joinQueue.waitForAccess(currentThread); // make current thread wait
 			currentThread.sleep(); // sleep until this finishes
 			Machine.interrupt().restore(intStatus); // re-enable interrupts

@@ -35,9 +35,10 @@ public class Lock {
 
 	boolean intStatus = Machine.interrupt().disable();
 	KThread thread = KThread.currentThread();
-
+	
 	if (lockHolder != null) {
 	    waitQueue.waitForAccess(thread);
+	    //donate priority to other thread
 	    KThread.sleep();
 	}
 	else {
