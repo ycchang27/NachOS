@@ -3,39 +3,14 @@ package nachos.threads;
 import nachos.machine.*;
 
 import java.util.TreeSet;
+
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
  * until a certain time.
  */
 public class Alarm {
-	private static final char dbgAlarm = 'a';
 	/**
-	 * Element pair <KThread, long> that the TreeSet stores
-	 */
-	public class Pair implements Comparable<Pair> {
-		public KThread thread;
-		public long wakeTime;
-		public Pair(KThread theThread, long wakeTime) {
-			this.thread = theThread;
-			this.wakeTime = wakeTime;
-		}
-		/**
-		 * Compare with other thread 
-		 * 
-		 * @return negative if this < kt
-		 * 		   positive if this > kt
-		 * 		   zero if this == kt
-		 */
-		public int compareTo(Pair p) {
-	        return (int)(this.wakeTime - p.wakeTime);
-	    }
-		public String toString() {
-			return thread.toString() + ", " + wakeTime;
-		}
-	}
-	private TreeSet<Pair> set; // A waiting queue to pop when the current time passes a certain time
-	/**
-	 * Allocate a new Alarm. Set the machine's timer interrupt handler to this
+	 * Allocate a new Alarm. Initialize the new TreeSet and set the machine's timer interrupt handler to this
 	 * alarm's callback.
 	 *
 	 * <p><b>Note</b>: Nachos will not function correctly with more than one
@@ -50,30 +25,23 @@ public class Alarm {
 
 	/**
 	 * The timer interrupt handler. This is called by the machine's timer
-	 * periodically (approximately every 500 clock ticks). Causes the current
-	 * thread to yield, forcing a context switch if there is another thread
-	 * that should be run.
+	 * periodically (approximately every 500 clock ticks). Wakes up and 
+	 * removes all threads that are ready to be woken up thread to yield, 
+	 * forcing a context switch if there is another thread that should be run.
 	 */
 	public void timerInterrupt() {
-		long time = Machine.timer().getTime();
-		boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
-		while (!set.isEmpty() && time >= set.first().wakeTime) { // might cause infinite loop?
+		long currentTime = Machine.timer().getTime();
+		boolean intStatus = Machine.interrupt().disable(); // calling ready() requires interrupts disabled
+
+		// wake up and remove all threads in the TreeSet that needs to be woken up
+		while (!set.isEmpty() && currentTime >= set.first().wakeTime) {
 			Lib.debug(dbgAlarm, "removing Alarm's set thread " +  set.first().thread.toString());
 			set.first().thread.ready();
 			set.pollFirst();
 		}
-		
-		// possible implementation: (untested, but no compile issues)
-//		for(Pair p : set)
-//		{
-//			if (Machine.timer().getTime() > p.wakeTime)
-//			{
-//				p.thread.ready();
-//				set.remove(p); // ESPECIALLY not sure if this works
-//			}
-//		}
+
 		Machine.interrupt().restore(intStatus); // re-enable interrupts
-		KThread.currentThread().yield();
+		KThread.yield(); // yield the current thread
 	}
 
 	/**
@@ -91,31 +59,60 @@ public class Alarm {
 	 * @see	nachos.machine.Timer#getTime()
 	 */
 	public void waitUntil(long x) {
-		Lib.debug(dbgAlarm, "Enter waitUntil with thread " + KThread.currentThread().toString());
-		
+		Lib.debug(dbgAlarm, "Sleeping thread " + KThread.currentThread().toString());
+
 		boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
-		
+
 		// insert current thread to the set
 		long wakeTime = Machine.timer().getTime() + x;
 		Pair p = new Pair(KThread.currentThread(), wakeTime);
 		set.add(p);
-		Lib.debug(dbgAlarm, "Ending waitUntil");
-		
+
 		KThread.sleep(); // sleep the current thread
-		
 		Machine.interrupt().restore(intStatus); // re-enable interrupts
-//		previous implementation
-//		while (KThread.currentThread().wakeTime > Machine.timer().getTime()) // check if current thread should wake
-//			KThread.currentThread().yield();	// else sleep
 	}
-	
+
 	/**
 	 * Tests whether this module is working.
 	 */
-	
 	public static void selfTest() {
 		Lib.debug(dbgAlarm, "Enter Alarm.selfTest");
-		Alarm a = new Alarm();
-		a.waitUntil(100);
+		// Test Alarm here...
+		
+	}
+
+	private static final char dbgAlarm = 'a';
+
+	/**
+	 * Alarm's Data structure that manages sleeping threads
+	 */
+
+	private TreeSet<Pair> set; // used to store sleeping KThreads
+	
+	/**
+	 * Element pair <KThread, long> that the TreeSet stores a pair of
+	 * KThread and wakeTime
+	 */
+	private class Pair implements Comparable<Pair> {
+		/** 
+		 * Note that the instance variables are public. Do not abuse!
+		 */
+		public KThread thread;
+		public long wakeTime;
+		public Pair(KThread theThread, long wakeTime) {
+			this.thread = theThread;
+			this.wakeTime = wakeTime;
+		}
+		
+		/**
+		 * Compare with the other pair 
+		 * 
+		 * @return negative if this.wakeTime < p.wakeTime
+		 * 		   positive if this.wakeTime > p.wakeTime
+		 * 		   zero if this.wakeTime == p.wakeTime
+		 */
+		public int compareTo(Pair p) {
+			return Long.valueOf(this.wakeTime).compareTo(Long.valueOf(p.wakeTime));
+		}
 	}
 }

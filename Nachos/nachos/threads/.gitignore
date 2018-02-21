@@ -30,3 +30,6 @@
 /Boat$Person.class
 /Boat$2.class
 /Person.class
+/PriorityScheduler$SortByEffectivePriority.class
+/PriorityScheduler$SortByPriority.class
+/Alarm$PingTest.class
