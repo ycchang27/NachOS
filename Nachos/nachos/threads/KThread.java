@@ -430,8 +430,52 @@ public class KThread {
 
 		new KThread(new PingTest(1)).setName("forked thread").fork();
 		new PingTest(0).run();
+		KThreadTest();
 	}
 
+	//KThread TEST
+	public static void KThreadTest()
+	{
+	Lib.debug(dbgThread, "KThread.KThreadTest");
+	
+	
+	//make new pingtest set to 0
+	new KThread(new PingTest(0)).setName("forked").fork();
+	//run a second pingtest
+	new PingTest(1).run();
+
+	final KThread joinTest = new KThread();
+
+	//TEST SHOULD RESULT IN FAILURE
+	joinTest.setTarget(new Runnable()
+		{
+			public void run()
+			{
+				String failtest = "FAIL";
+				try
+				{
+					joinTest.join();
+				}
+				catch(Error e)
+				{
+					failtest = "PASS";
+				}
+				System.out.print(failtest);
+				System.out.print(": Sucessfully failed joining to self.\n");
+			
+			}
+		
+		});
+	//FORK
+	//fork: gives a brand new process which is a copy of current process
+	joinTest.fork();
+	//TESTING JOIN
+	//join: cant join the same thread to itself
+	joinTest.join();
+	
+	}
+
+	
 	private static final char dbgThread = 't';
 
 	/**
@@ -472,50 +516,6 @@ public class KThread {
 	
 	private ThreadQueue joinQueue = null;
 	
-	
-	//KThread TEST
-	public static void KThreadTest()
-	{
-	Lib.debug(dbgThread, "KThread.KThreadTest");
-	
-	
-	//make new pingtest set to 0
-	new KThread(new PingTest(0)).setName("forked").fork();
-	//run a second pingtest
-	new PingTest(1).run();
-	
-	//JOIN TEST
-	final KThread joinTest = new KThread();
-	//FORK
-	//fork: gives a brand new process which is a copy of current process
-	joinTest.fork();
-	//TESTING JOIN
-	//join: cant join the same thread to itself
-	joinTest.join();
-	
-	//TEST SHOULD RESULT IN FAILURE
-	joinTest.setTarget(new Runnable()
-		{
-			public void run()
-			{
-				String failtest = "FAIL";
-				try
-				{
-					joinTest.join();
-				}
-				catch(Error e)
-				{
-					failtest = "PASS";
-				}
-				System.out.print(failtest);
-				System.out.print(": Tried to join to self.");
-			
-			}
-		
-		});
-	
-	}
 
-	
 	
 }
