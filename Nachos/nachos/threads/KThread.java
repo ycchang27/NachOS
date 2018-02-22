@@ -430,6 +430,7 @@ public class KThread {
 
 		new KThread(new PingTest(1)).setName("forked thread").fork();
 		new PingTest(0).run();
+		//EXECUTE OUR TEST
 		KThreadTest();
 	}
 
