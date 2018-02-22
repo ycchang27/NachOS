@@ -4,22 +4,21 @@ import nachos.ag.BoatGrader;
 import nachos.machine.Machine;
 import java.util.ArrayList;
 
-class Person {
-	KThread personThread;
-	int numPeopleOnOahu; 
-	boolean atMolokai; 
-	Person(Runnable r){
-		atMolokai = false;
-		personThread = new KThread(r);
-		personThread.fork();
-	}
-
-}
 public class Boat
 {
+	// constants
+	static final int child = 1;
+	static final int adult = 2;
+	
 	static BoatGrader bg;
-	static ArrayList<Person> people; 
-
+	
+	static Lock boat_permit; // only lock holder may attempt to "row" the boat
+	static boolean boat_at_Oahu = true; // boat state var
+	static int boat_capacity = 0; // boat max capacity at 2*children or 1*adult
+	
+	static int num_people_at_Oahu = 0; // lock holder may set this value after running
+	
+	static ArrayList<Person> people; // container of Person objects (see Person.java)
 
 	public static void selfTest()
 	{
@@ -42,50 +41,43 @@ public class Boat
 		bg = b;
 
 		// Instantiate global variables here
-		people = new ArrayList<Person>(adults + children); 
+		boat_permit = new Lock();
 
 		// Create threads here. See section 3.4 of the Nachos for Java
 		// Walkthrough linked from the projects page.
 
-		//		Runnable r = new Runnable() {
-		//			public void run() {
-		//				SampleItinerary();
-		//			}
-		//		};
-		//		KThread t = new KThread(r);
-		//		t.setName("Sample Boat Thread");
-		//		t.fork();
-
-		Runnable C = new Runnable() {
-			public void run() {
-				ChildItinerary();
-			}
-		};
+			/*Runnable r = new Runnable() {
+				public void run() {
+					SampleItinerary();
+				}
+			};
+			KThread t = new KThread(r);
+			t.setName("Sample Boat Thread");
+			t.fork();*/
+		
 		Runnable A = new Runnable() {
 			public void run() {
 				AdultItinerary();
 			}
 		};
+		Runnable C = new Runnable() {
+			public void run() {
+				ChildItinerary();
+			}
+		};
 		
-		boolean intStatus = Machine.interrupt().disable();
+		boolean intStatus = Machine.interrupt().disable(); // prevent context switch until done spawning
 		
-		// Spawn children 
-		for(int i = 0 ; i < children; i++) {
-			Person child = new Person(C); 
-			people.add(child);
+		for (int i = 0; i < adults; ++i)
+		{
+			people.add(new Person(A, adult));
 		}
-		// Spawn adults 
-		for(int j = 0 ; j < adults; j++) {
-			Person adult = new Person(A); 
-			people.add(adult);
+		for (int i = 0; i < children; ++i)
+		{
+			people.add(new Person(C, child));
 		}
 		
-		Machine.interrupt().restore(intStatus);
-
-//		KThread t = new KThread(r);
-//		t.setName("Sample Boat Thread");
-//		t.fork();
-
+		Machine.interrupt().restore(intStatus); // spawning complete
 	}
 
 	static void AdultItinerary()
