@@ -35,7 +35,7 @@ public class Alarm {
 
 		// wake up and remove all threads in the TreeSet that needs to be woken up
 		while (!set.isEmpty() && currentTime >= set.first().wakeTime) {
-			Lib.debug(dbgAlarm, "removing Alarm's set thread " +  set.first().thread.toString());
+			Lib.debug(dbgAlarm, "Waking up thread " +  set.first().thread.toString() + " at " + currentTime + " cycles");
 			set.first().thread.ready();
 			set.pollFirst();
 		}
@@ -59,12 +59,11 @@ public class Alarm {
 	 * @see	nachos.machine.Timer#getTime()
 	 */
 	public void waitUntil(long x) {
-		Lib.debug(dbgAlarm, "Sleeping thread " + KThread.currentThread().toString());
-
 		boolean intStatus = Machine.interrupt().disable(); // calling sleep() requires interrupts disabled
 
 		// insert current thread to the set
 		long wakeTime = Machine.timer().getTime() + x;
+		Lib.debug(dbgAlarm, "Sleeping thread " + KThread.currentThread().toString() + " until " + wakeTime + " cycles");
 		Pair p = new Pair(KThread.currentThread(), wakeTime);
 		set.add(p);
 
@@ -76,9 +75,21 @@ public class Alarm {
 	 * Tests whether this module is working.
 	 */
 	public static void selfTest() {
+		class RunAlarm implements Runnable {
+			public void run() {
+				ThreadedKernel.alarm.waitUntil(5000);
+			}
+		}
 		Lib.debug(dbgAlarm, "Enter Alarm.selfTest");
-		// Test Alarm here...
 		
+		/** 
+		 * Test: call waitUntil on 2 KThreads and see if they sleep 
+		 * and wake up at the right time
+		*/ 
+		ThreadedKernel.alarm = new Alarm();
+		RunAlarm run = new RunAlarm();
+		new KThread(run).setName("t1").fork();
+		new KThread(run).setName("t2").fork();
 	}
 
 	private static final char dbgAlarm = 'a';
