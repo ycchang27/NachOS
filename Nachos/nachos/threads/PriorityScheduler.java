@@ -160,10 +160,9 @@ public class PriorityScheduler extends Scheduler {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			// implement me
 			ThreadState n = pickNextThread(); // implemented below
-			if (n == null) return null;	// if no ThreadState was returned, then no thread is waiting or error
-			n.acquire(this); // calls ThreadState.acquire(priorityQueue) implemented below
-			
-			// increment other thread's waiting time
+			if (n == null) return null;	// if no ThreadState was returned, then no thread is waiting (or error)
+
+			// increment all other thread's waiting time
 			for (ThreadState t : thread_states)
 			{
 				t.turns_waiting++;
@@ -186,7 +185,7 @@ public class PriorityScheduler extends Scheduler {
 
 		public void print() {
 			Lib.assertTrue(Machine.interrupt().disabled());
-			// implement me (if you want) // nah
+			// implement me (if you want)
 		}
 
 		/**
@@ -233,7 +232,22 @@ public class PriorityScheduler extends Scheduler {
 		public int getEffectivePriority() {
 			// implement me
 			int effective_priority = priority + donor; // base priority + donations
-			return (effective_priority < priorityMaximum)? ((effective_priority > priorityMinimum)? effective_priority : priorityMinimum) : priorityMaximum;
+			// return (effective_priority < priorityMaximum)? ((effective_priority > priorityMinimum)? effective_priority : priorityMinimum) : priorityMaximum;
+			if (effective_priority < priorityMaximum)
+			{
+				if (effective_priority > priorityMinimum)
+				{
+					return effective_priority;
+				}
+				else
+				{
+					return priorityMinimum;
+				}
+			}
+			else
+			{
+				return priorityMaximum;
+			}
 		}
 
 		/**
@@ -246,7 +260,22 @@ public class PriorityScheduler extends Scheduler {
 				return;
 
 			// implement me
-			this.priority = (priority < priorityMaximum)? ((priority > priorityMinimum)? priority: priorityMinimum) : priorityMaximum;
+			// this.priority = (priority < priorityMaximum)? ((priority > priorityMinimum)? priority: priorityMinimum) : priorityMaximum;
+			if (priority < priorityMaximum)
+			{
+				if (priority > priorityMinimum)
+				{
+					this.priority = priority;
+				}
+				else
+				{
+					this.priority = priorityMinimum;
+				}
+			}
+			else
+			{
+				this.priority = priorityMaximum;
+			}
 		}
 
 		/**
@@ -263,18 +292,15 @@ public class PriorityScheduler extends Scheduler {
 		 */
 		public void waitForAccess(PriorityQueue waitQueue) {
 			// implement me
-			this.donor -= this.priority; // since thread is waiting, it doesn't need any priority
 			this.turns_waiting = 0; // start waiting count at 0
-			if (!waitQueue.thread_states.contains(this)) // safety check ...
+			ThreadState lowest = waitQueue.thread_states.pollFirst(); // fetch & remove lowest priority thread in queue
+			if (lowest != null)
 			{
-				waitQueue.thread_states.add(this); // add to wait queue
-				waitQueue.thread_states.first().donor += this.priority; // donate priority to lowest priority thread and hope resource will eventually be freed
+				this.donor -= this.priority*(0.8); // since thread is waiting, donate majority of its priority ...
+				lowest.donor -= this.donor; // ... to the lowest priority thread
+				waitQueue.thread_states.add(lowest); // return it to the queue
 			}
-			else
-			{
-				// ... shouldn't happen
-				return;
-			}
+			if (!waitQueue.thread_states.contains(this)) waitQueue.thread_states.add(this); // add self to queue
 		}
 
 		/**
@@ -290,16 +316,8 @@ public class PriorityScheduler extends Scheduler {
 		public void acquire(PriorityQueue waitQueue) {
 			// implement me
 			this.donor = 0; // no need to donate after acquiring resources
-			this.turns_waiting = 0; // finished waiting
-			if (waitQueue.thread_states.contains(this)) // safety check ...
-			{
-				waitQueue.thread_states.remove(this); // remove self from wait queue
-			}
-			else
-			{
-				// shouldn't happen
-				return;
-			}
+			this.turns_waiting = 0; // finished waiting or never waited
+			if (waitQueue.thread_states.contains(this)) waitQueue.thread_states.remove(this); // if self is on queue, remove self from wait queue
 		}
 
 		/** The thread with which this object is associated. */	   
@@ -316,7 +334,7 @@ public class PriorityScheduler extends Scheduler {
 		public int compare(ThreadState a, ThreadState b)
 		{
 			// sort in ascending order of effective priority and accumulated wait time
-			return 4*(a.getEffectivePriority() - b.getEffectivePriority()) + (a.turns_waiting - b.turns_waiting);
+			return 128*(a.getEffectivePriority() - b.getEffectivePriority()) + (a.turns_waiting - b.turns_waiting);
 		}
 	}
 	class SortByPriority implements Comparator<ThreadState>
@@ -324,7 +342,7 @@ public class PriorityScheduler extends Scheduler {
 		public int compare(ThreadState a, ThreadState b)
 		{
 			// sort in ascending order of base priority and accumulated wait time
-			return 4*(a.getPriority() - b.getPriority()) + (a.turns_waiting - b.turns_waiting);
+			return 128*(a.getPriority() - b.getPriority()) + (a.turns_waiting - b.turns_waiting);
 		}
 	}
 }
