@@ -428,9 +428,11 @@ public class KThread {
 	public static void selfTest() {
 		Lib.debug(dbgThread, "Enter KThread.selfTest");
 
+
 		new KThread(new PingTest(1)).setName("forked thread").fork();
 		new PingTest(0).run();
 		//EXECUTE OUR TEST
+	    System.out.println("--------------Testing KThread Join ------------------");
 		KThreadTest();
 	}
 
@@ -438,12 +440,6 @@ public class KThread {
 	public static void KThreadTest()
 	{
 	Lib.debug(dbgThread, "KThread.KThreadTest");
-	
-	
-	//make new pingtest set to 0
-	new KThread(new PingTest(0)).setName("forked").fork();
-	//run a second pingtest
-	new PingTest(1).run();
 
 	final KThread joinTest = new KThread();
 

@@ -1,7 +1,6 @@
 package nachos.threads;
 
 import nachos.machine.*;
-
 import java.util.LinkedList;
 
 /**
@@ -10,7 +9,7 @@ import java.util.LinkedList;
  *
  * <p>
  * You must implement this.
- *
+ *S
  * @see	nachos.threads.Condition
  */
 public class Condition2 {
@@ -22,6 +21,7 @@ public class Condition2 {
 	 *				lock whenever it uses <tt>sleep()</tt>,
 	 *				<tt>wake()</tt>, or <tt>wakeAll()</tt>.
 	 */
+
 	public Condition2(Lock conditionLock) {
 		this.conditionLock = conditionLock;
 
@@ -88,6 +88,50 @@ public class Condition2 {
 		Machine.interrupt().restore(status);
 	}
 
+	public static void selfTest()
+	{     //used for testing wake and wakeall
+       System.out.println("--------------Testing Condition 2 ------------------");
+       
+       //Variables for testing functions
+       final Lock lock = new Lock();
+       final Condition2 con2 = new Condition2(lock);
+       
+       KThread sleep = new KThread(new Runnable()
+       {
+    //Test 1: Sleep
+      public void run()
+       {
+    	  //get the Lock
+    	   lock.acquire();
+    	   
+    	   System.out.println("TESTING SLEEP"); 
+    	   System.out.println("Test 1:\n...Going to sleep.....\n");
+    	   con2.sleep();
+    	   System.out.println("Test 1 Complete: Woke up!");
+    	   lock.release();
+       }
+       
+    });
+       
+       sleep.fork();
+      
+		KThread wake =	new KThread(new Runnable()
+		{
+		//Test 2: Wake
+           public void run()
+           {
+        	   lock.acquire();
+        	   System.out.println("TESTING WAKE"); 
+               System.out.println("Test 2:\n...Waking a thread...\n");
+               con2.wake();      
+				System.out.println("Test 2 Complete: Waking Up!");
+				lock.release();
+       } } );
+		wake.fork();
+		sleep.join();   
+	}
+
+	
 	private Lock conditionLock;
 	// private LinkedList<Lock> waitQueue;
 	private LinkedList<KThread> waitQueue;
