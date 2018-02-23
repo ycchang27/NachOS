@@ -107,7 +107,7 @@ public class Condition2 {
     	   System.out.println("TESTING SLEEP"); 
     	   System.out.println("Test 1:\n...Going to sleep.....\n");
     	   con2.sleep();
-    	   System.out.println("Test 1 Complete: Woke up!");
+    	   System.out.println("Test 1 Complete: Woke up!\n");
     	   lock.release();
        }
        
@@ -128,7 +128,52 @@ public class Condition2 {
 				lock.release();
        } } );
 		wake.fork();
-		sleep.join();   
+		sleep.join();
+		
+		System.out.println("\nTEST 3: SLEEP AND WAKEALL");
+		KThread sleep1 =	new KThread(new Runnable()
+		{
+		//Test 3: Wake All sleeping thread 1
+           public void run()
+           {
+        	   lock.acquire();
+               System.out.println("\n...Sleep1 going to sleep...\n");
+               con2.sleep();      
+				System.out.println("Test 3: Sleep1 waking up!");
+				lock.release();
+       } } );
+		sleep1.fork();
+		
+		KThread sleep2 =	new KThread(new Runnable()
+		{
+		//Test 3: Wake All sleeping thead 2
+           public void run()
+           {
+        	   lock.acquire();
+               System.out.println("\n...Sleep2 going to sleep...\n");
+               con2.sleep();      
+				System.out.println("Test 3: Sleep2 waking up!");
+
+				System.out.println("Test 3 Complete: Everyone is awake!");
+				lock.release();
+       } } );
+		sleep2.fork();
+		
+		
+		KThread wakeall =	new KThread(new Runnable()
+		{
+		//Test 3: Wake all
+           public void run()
+           {
+        	   lock.acquire();
+        	   System.out.println("TESTING WAKEALL"); 
+               System.out.println("\n...Waking all sleeping threads...\n");
+               con2.wakeAll();    
+				lock.release();
+       } } );
+		wakeall.fork();
+
+
 	}
 
 	
