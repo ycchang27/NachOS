@@ -49,8 +49,6 @@ public class Boat
 		boat_permit = new Lock();
 		allow_adult = new Lock();
 		set_finish = new Lock();
-		check_done = new Communicator();
-		check_done.speak(false);
 
 		// Create threads here. See section 3.4 of the Nachos for Java
 		// Walkthrough linked from the projects page.
