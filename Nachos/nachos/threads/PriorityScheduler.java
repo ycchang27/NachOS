@@ -257,16 +257,14 @@ public class PriorityScheduler extends Scheduler {
 		 * @param	priority	the new priority.
 		 */
 		public void setPriority(int priority) {
-			System.out.println("This is the current priority: "+ this.priority);
 			if (this.priority == priority) {
-				// System.out.println("This is the current priority: "+ priority);
 				return;
 			} 
 			// implement me
 			// this.priority = (priority < priorityMaximum)? ((priority > priorityMinimum)? priority: priorityMinimum) : priorityMaximum;
-			if (priority < priorityMaximum)
+			if (priority <= priorityMaximum)
 			{
-				if (priority > priorityMinimum)
+				if (priority >= priorityMinimum)
 				{
 					this.priority = priority;
 				}
