@@ -233,6 +233,7 @@ public class PriorityScheduler extends Scheduler {
 			// implement me
 			int effective_priority = priority + donor; // base priority + donations
 			// return (effective_priority < priorityMaximum)? ((effective_priority > priorityMinimum)? effective_priority : priorityMinimum) : priorityMaximum;
+			
 			if (effective_priority < priorityMaximum)
 			{
 				if (effective_priority > priorityMinimum)
@@ -256,9 +257,11 @@ public class PriorityScheduler extends Scheduler {
 		 * @param	priority	the new priority.
 		 */
 		public void setPriority(int priority) {
-			if (this.priority == priority)
+			System.out.println("This is the current priority: "+ this.priority);
+			if (this.priority == priority) {
+				// System.out.println("This is the current priority: "+ priority);
 				return;
-
+			} 
 			// implement me
 			// this.priority = (priority < priorityMaximum)? ((priority > priorityMinimum)? priority: priorityMinimum) : priorityMaximum;
 			if (priority < priorityMaximum)
@@ -300,6 +303,12 @@ public class PriorityScheduler extends Scheduler {
 				lowest.donor -= this.donor; // ... to the lowest priority thread
 				waitQueue.thread_states.add(lowest); // return it to the queue
 			}
+			
+			for (ThreadState t : waitQueue.thread_states)
+			{
+				t.turns_waiting++;
+			}
+			
 			if (!waitQueue.thread_states.contains(this)) waitQueue.thread_states.add(this); // add self to queue
 		}
 
