@@ -96,16 +96,38 @@ public class Boat
 		//DO NOT PUT ANYTHING ABOVE THIS LINE. 
 
 		/* This is where you should put your solutions. Make calls
-	   to the BoatGrader to show that it is synchronized. For
-	   example:
-		   bg.AdultRowToMolokai();
-	   indicates that an adult has rowed the boat across to Molokai
+		to the BoatGrader to show that it is synchronized. For
+		example:
+			bg.AdultRowToMolokai();
+		indicates that an adult has rowed the boat across to Molokai
 		 */
-	   Oahu_population.acquire();
-	   num_people_at_Oahu++;
-	   Oahu_population.release();
-	   // sync
+		boolean at_Oahu = true;		// thread start at Oahu
 
+		Oahu_population.acquire();
+		num_people_at_Oahu++;		// increment Oahu population counter when spawning in
+		Oahu_population.release();
+		
+		while (!finished)
+		{
+			boat_permit.acquire();	// only one thread may access boat at once
+			if (boat_at_Oahu && at_Oahu && boat_capacity == 0 && adult_may_go && !finished) // adults must have permission before using boat
+			{
+				boat_capacity += adult;		// add self to boat
+				Oahu_population.acquire();
+				num_people_at_Oahu--;		// remove self from Oahu population
+				Oahu_population.release();
+				if (num_people_at_Oahu == 0)
+				{
+					finished = true;		// finished = true if Oahu is empty
+				}
+				bg.AdultRowToMolokai();		// row self to Molokai
+				at_Oahu = false;			// no longer at Oahu
+				boat_capacity = 0;			// leave boat
+				boat_at_Oahu = false;		// boat is now at Molokai
+				adult_may_go = false;		// used up permission for adults to use boat
+			}
+			boat_permit.release(); 		// let next thread use boat
+		}
 	}
 
 	static void ChildItinerary()
@@ -121,7 +143,7 @@ public class Boat
 		while (!finished)
 		{
 			boat_permit.acquire(); // only one thread may access the boat at a time
-			if (boat_at_Oahu && at_Oahu && boat_capacity < 2 && !finished) // if boat and thread are at Oahu
+			if (boat_at_Oahu && at_Oahu && boat_capacity < 2 && !finished && !adult_may_go) // if boat and thread are at Oahu
 			{
 				boat_capacity += child;			// add self to boat
 				Oahu_population.acquire();
