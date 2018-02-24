@@ -338,7 +338,9 @@ public class PriorityScheduler extends Scheduler {
 	// Comparator objects
 	class SortByEffectivePriority implements Comparator<ThreadState>
 	{
-		public int compare(ThreadState a, ThreadState b)
+		// switching a and b to switch pollFirst and pollLast 
+		// public int compare(ThreadState a, ThreadState b)
+		public int compare(ThreadState b, ThreadState a)
 		{
 			// sort in ascending order of effective priority and accumulated wait time
 			return 128*(a.getEffectivePriority() - b.getEffectivePriority()) + (a.turns_waiting - b.turns_waiting);
@@ -346,7 +348,9 @@ public class PriorityScheduler extends Scheduler {
 	}
 	class SortByPriority implements Comparator<ThreadState>
 	{
-		public int compare(ThreadState a, ThreadState b)
+		// switching a and b to switch pollFirst and pollLast 
+		// public int compare(ThreadState a, ThreadState b)
+		public int compare(ThreadState b, ThreadState a)
 		{
 			// sort in ascending order of base priority and accumulated wait time
 			return 128*(a.getPriority() - b.getPriority()) + (a.turns_waiting - b.turns_waiting);
