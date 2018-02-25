@@ -70,16 +70,6 @@ public class Alarm {
 		KThread.sleep(); // sleep the current thread
 		Machine.interrupt().restore(intStatus); // re-enable interrupts
 	}
-
-	/**
-	 * Checks whether the TreeSet is empty. This function is only intended to be used for
-	 * selfTest(). Do not use this for anything else.
-	 * 
-	 * @return true if the set is empty, and false if otherwise
-	 */
-	public boolean emptySet() {
-		return set.isEmpty();
-	}
 	
 	/**
 	 * Tests whether this module is working. Call waitUntil on X KThreads 

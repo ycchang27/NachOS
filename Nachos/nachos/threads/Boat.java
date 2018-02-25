@@ -1,6 +1,7 @@
 package nachos.threads;
 
 import nachos.ag.BoatGrader;
+import nachos.machine.Lib;
 import nachos.machine.Machine;
 import java.util.ArrayList;
 
@@ -9,6 +10,7 @@ public class Boat
 	// constants
 	static final int child = 1;
 	static final int adult = 2;
+	private static final char dbgBoat = 'b'; // char for Lib.debug print tool
 	
 	static BoatGrader bg;
 	
@@ -27,6 +29,7 @@ public class Boat
 
 	public static void selfTest()
 	{
+		Lib.debug(dbgBoat, "Enter Boat.selfTest()");
 		BoatGrader b = new BoatGrader();
 
 		System.out.println("\n ***Testing Boats with only 2 children***");
@@ -37,6 +40,12 @@ public class Boat
 
 		//  	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
 		//  	begin(3, 3, b);
+		/* Busy waiting to prevent this test from ending too quickly */
+//		for(int i = 0; i < 1000; i ++) {
+//			KThread.yield();
+//		}
+		
+		Lib.debug(dbgBoat, "Exit Boat.selfTest()");
 	}
 
 	public static void begin( int adults, int children, BoatGrader b )
@@ -49,7 +58,8 @@ public class Boat
 		boat_permit = new Lock();
 		allow_adult = new Lock();
 		set_finish = new Lock();
-
+		Oahu_population = new Lock();
+		
 		// Create threads here. See section 3.4 of the Nachos for Java
 		// Walkthrough linked from the projects page.
 
@@ -73,21 +83,76 @@ public class Boat
 			}
 		};
 		
-		boolean intStatus = Machine.interrupt().disable(); // prevent context switch until done spawning
+		// previous implementation:
+		// boolean intStatus = Machine.interrupt().disable(); // prevent context switch until done spawning
+		
+		// generate list of children and adults
+		KThread[] adult_list = new KThread[adults];
+		KThread[] child_list = new KThread[children];
+		
+		// implementation suggestion:
+		// num_people_at_Oahu = adults + children;
 		
 		for (int i = 0; i < adults; ++i)
 		{
-			KThread t = new KThread(A);
-			t.fork();
+			adult_list[i] = new KThread(A).setName("Adult " + (i+1));
+			// previous implementation:
+			// adult_list[i].fork();
 		}
-
 		for (int i = 0; i < children; ++i)
 		{
-			KThread t = new KThread(C);
-			t.fork();
+			child_list[i] = new KThread(C).setName("Child " + (i+1));
+			// previous implementation:
+			// child_list[i].fork();
+		}
+		// previous implementation:
+		// Machine.interrupt().restore(intStatus); // spawning complete
+		
+		/**
+		 * Things to consider:
+		 * 	- Are multiple adult/child threads necessary? How about 1 adult and 1 child?
+		 *  - Do we really need locks?
+		 *  - Do we need a complicated system to add num people at Oahu? Why not just set to adults + children?
+		 *  - Do we need to disable interrupt when creating threads?
+		 *  - Do we need to disable interrupt when calling Adult/ChildItinerary?
+		 */
+		
+		/** 
+		 * Send adults to Molokai
+		 * Do the following (Prob in AdultItinerary?):
+		 *  1) Send 2 children to Molokai
+		 *  2) Send 1 child to Oahu (to return the boat)
+		 * 	3) Send an adult to Molokai
+		 *  4) Send 1 child to Oahu
+		 *  5) Decrement number of adults
+		*/	
+		int i = 0;
+		while(adults != 0) {
+			// possible implementation:
+			// adult_list[i].fork();
+			// i++;
+			break;
 		}
 		
-		Machine.interrupt().restore(intStatus); // spawning complete
+		// send remaining children to Molokai
+		/**
+		 * Send children to Molokai
+		 * Do the following (Do the following (Prob in ChildItinerary?):
+		 *  1) If only a child is at Oahu, send the last child to Molokai and then
+		 *  decrement the number of children by 1
+		 *  2) If only 2 children are at Oahu, send the last two children to Molokai
+		 *  and then decrement the number of children by 2
+		 *  3) If more than 2 children are at Oahu, send 2 children to Molokai
+		 *  and then send 1 child to Oahu (to return the boat) and decrement the number of 
+		 *  children by 2
+		 */
+		i = 0;
+		while(children != 0) {
+			// possible implementation:
+			// child_list[i].fork();
+			// i++;
+			break;
+		}
 	}
 
 	static void AdultItinerary()
