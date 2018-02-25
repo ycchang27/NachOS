@@ -151,7 +151,7 @@ public class PriorityScheduler extends Scheduler {
 	    	return null;
 	    }
 	 
-	    if ((this.transferPriority == true) && (this.owner != null))
+	    if ((this.owner != null) && (this.transferPriority == true)  )
 	    {
 	    	this.owner.threadList.remove(this);
 	    }
@@ -179,7 +179,7 @@ public class PriorityScheduler extends Scheduler {
 		for (Iterator<KThread> i = waitThreads.iterator(); i.hasNext();)
 		{
 			KThread threadstate = i.next();
-			if(getThreadState(threadstate).getEffectivePriority() > getThreadState(nextThread).getEffectivePriority() || nextThread == null)
+			if( nextThread == null ||getThreadState(threadstate).getEffectivePriority() > getThreadState(nextThread).getEffectivePriority() )
 			{
 				nextThread = threadstate;
 			}
