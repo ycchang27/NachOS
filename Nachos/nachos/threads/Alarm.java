@@ -35,7 +35,8 @@ public class Alarm {
 
 		// wake up and remove all threads in the TreeSet that needs to be woken up
 		while (!set.isEmpty() && currentTime >= set.first().wakeTime) {
-			Lib.debug(dbgAlarm, "Waking up thread " +  set.first().thread.toString() + " at " + currentTime + " cycles");
+			Lib.debug(dbgAlarm, "Waking up thread " +  set.first().thread.toString() + " at " 
+					+ currentTime + " cycles");
 			set.first().thread.ready();
 			set.pollFirst();
 		}
@@ -63,58 +64,78 @@ public class Alarm {
 
 		// insert current thread to the set
 		long wakeTime = Machine.timer().getTime() + x;
-		Lib.debug(dbgAlarm, "Sleeping thread " + KThread.currentThread().toString() + " until " + wakeTime + " cycles");
-		Pair p = new Pair(KThread.currentThread(), wakeTime);
-		set.add(p);
+		Lib.debug(dbgAlarm, "At " + (wakeTime-x) + " cycles, sleeping thread " + KThread.currentThread().toString() + " until " + wakeTime + " cycles");
+		set.add(new Pair(KThread.currentThread(), wakeTime));
 
 		KThread.sleep(); // sleep the current thread
 		Machine.interrupt().restore(intStatus); // re-enable interrupts
 	}
 
 	/**
-	 * Tests whether this module is working.
+	 * Checks whether the TreeSet is empty. This function is only intended to be used for
+	 * selfTest(). Do not use this for anything else.
+	 * 
+	 * @return true if the set is empty, and false if otherwise
+	 */
+	public boolean emptySet() {
+		return set.isEmpty();
+	}
+	
+	/**
+	 * Tests whether this module is working. Call waitUntil on X KThreads 
+	 * and see if they sleep and wake up at the right time
 	 */
 	public static void selfTest() {
+		/**
+		 * Runnable class to make KThread call waitUntil function
+		 */
 		class RunAlarm implements Runnable {
 			public void run() {
-				ThreadedKernel.alarm.waitUntil(5000);
+				// Wake up thread after 500-1499 cycles
+				ThreadedKernel.alarm.waitUntil((int)(Math.random() * 1000) + 500);
 			}
 		}
+		
 		Lib.debug(dbgAlarm, "Enter Alarm.selfTest");
 		
-		/** 
-		 * Test: call waitUntil on 2 KThreads and see if they sleep 
-		 * and wake up at the right time
-		*/ 
-		ThreadedKernel.alarm = new Alarm();
+		final int NUM_OF_THREADS = 7; // specify the desired number of threads to test with
+		
+		// set up KThreads for testing
 		RunAlarm run = new RunAlarm();
-		new KThread(run).setName("t1").fork();
-		new KThread(run).setName("t2").fork();
+		for(int i = 0; i < NUM_OF_THREADS; i++) {
+			new KThread(run).setName("t"+i).fork();
+		}
+		
+		KThread.yield(); // switch to t1 (will be switched to t2 next)
+		
+		// busy waiting to prevent this test from ending
+		while (!ThreadedKernel.alarm.set.isEmpty()) {
+			KThread.yield(); // keep switching threads (the main one and other available threads)
+		}
+		
+		Lib.debug(dbgAlarm, "Exit Alarm.selfTest");
 	}
 
-	private static final char dbgAlarm = 'a';
+	private static final char dbgAlarm = 'a';	// char for Lib.debug print tool
 
 	/**
 	 * Alarm's Data structure that manages sleeping threads
 	 */
-
 	private TreeSet<Pair> set; // used to store sleeping KThreads
-	
+
 	/**
 	 * Element pair <KThread, long> that the TreeSet stores a pair of
 	 * KThread and wakeTime
+	 * <p><b>Note</b>: The instance variables are public. Do not abuse!
 	 */
 	private class Pair implements Comparable<Pair> {
-		/** 
-		 * Note that the instance variables are public. Do not abuse!
-		 */
 		public KThread thread;
 		public long wakeTime;
 		public Pair(KThread theThread, long wakeTime) {
 			this.thread = theThread;
 			this.wakeTime = wakeTime;
 		}
-		
+
 		/**
 		 * Compare with the other pair 
 		 * 
