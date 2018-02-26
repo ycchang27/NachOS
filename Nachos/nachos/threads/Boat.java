@@ -126,6 +126,66 @@ public class Boat
 		bg.initializeChild(); //Required for autograder interface. Must be the first thing called.
 		//DO NOT PUT ANYTHING ABOVE THIS LINE.
 		
+		bool at_Oahu = true;
+
+		Oahu_pop.acquire();
+		num_children_at_Oahu++;
+		Oahu_pop.release();
+
+		block_sync.waitUntil(100);
+
+		while (!finished)
+		{
+			boat_permit.acquire();
+			if (boat_at_Oahu && at_Oahu && boat_capacity < 2 && !finished && (!allow_adult || num_children_at_Oahu > 0))
+			{
+				boat_capacity++;
+				Oahu_pop.acquire();
+				num_children_at_Oahu--;
+				Oahu_pop.release();
+				at_Oahu = false;
+				if ((num_adults_at_Oahu + num_children_at_Oahu) == 0)
+				{
+					finished = true;
+					bg.ChildRowToMolokai();
+					if (boat_capacity == 2)
+					{
+						bg.ChildRideToMolokai();
+					}
+					boat_capacity = 0;
+					boat_at_Oahu = false;
+				}
+				else if (boat_capacity == 2)
+				{
+					bg.ChildRowToMolokai();
+					bg.ChildRideToMolokai();
+					boat_capacity = 0;
+					boat_at_Oahu = false;
+				}
+				else if (num_children_at_Oahu == 0)
+				{
+					boat_capacity--;
+					Oahu_pop.acquire();
+					num_children_at_Oahu++;
+					Oahu_pop.release();
+					at_Oahu = true;
+				}
+			}
+			else if (!boat_at_Oahu && !at_Oahu && boat_capacity < 2 && !finished)
+			{
+				bg.ChildRowToMolokai();
+				at_Oahu = true;
+				Oahu_pop.acquire();
+				num_children_at_Oahu++;
+				Oahu_pop.release();
+				boat_at_Oahu = true;
+				allow_adult = true;
+			}
+			boat_permit.release();
+			KThread.yield();
+		}
+
+		return;
 	}
 
 	static void SampleItinerary()
