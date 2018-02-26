@@ -165,6 +165,25 @@ public class PriorityScheduler extends Scheduler {
 	    return headThread.thread;
 	}
 
+	public int getEffectivePriority() {
+  	    if (transferPriority == false)
+	        return priorityMinimum;
+  	    
+        if (dirtyBit == true) {
+            effectivePriority = priorityMinimum;
+            for (Iterator<KThread> it = waitThreads.iterator(); it.hasNext(); ) {
+	            KThread nextthread = it.next();
+	            int eF = getThreadState(nextthread).getEffectivePriority();
+	            if (eF > effectivePriority)
+	            {
+	                effectivePriority = eF;
+	            }
+	        }
+	        dirtyBit = false;
+	    }
+        return effectivePriority;
+    }
+
 	/**
 	 * Return the next thread that <tt>nextThread()</tt> would return,
 	 * without modifying the state of this queue.
@@ -256,12 +275,12 @@ public class PriorityScheduler extends Scheduler {
 			for(Iterator<PriorityQueue> i = threadList.iterator(); i.hasNext();)
 			{
 			PriorityQueue priorQ = i.next();
-			int effectiveP = priorQ.effectivePriority;
+			int effectiveP = priorQ.getEffectivePriority();
 			if (effectiveP > effectivePriority)
 				effectivePriority = effectiveP;
 			}
 		}
-	    return priority;
+	    return effectivePriority;
 	}
 
 	/**
@@ -276,16 +295,7 @@ public class PriorityScheduler extends Scheduler {
 	    this.priority = priority;
 	    
 	    // implement me
-	    if(dirtyBit == true)
-		{
-			return;
-		}
-		dirtyBit = true;
-		PriorityQueue pQueue = waitQ;
-		if(pQueue !=null)
-		{
-			pQueue.setDirtyBool();
-		}
+	    setDirtyBool();
 		
 	}
 
@@ -375,8 +385,8 @@ public class PriorityScheduler extends Scheduler {
 	{
 		//System.out.println("... Running Priority Scheduler Test 1 (Different Priorities) ...");
 	
-		
-		
+
+
 	}
 	
 	

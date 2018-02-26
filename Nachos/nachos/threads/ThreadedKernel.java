@@ -51,6 +51,7 @@ public class ThreadedKernel extends Kernel {
 	//Testing for condition2
 	Condition2.selfTest();
 	SynchList.selfTest();
+	PriorityScheduler.selfTest();
 	if (Machine.bank() != null) {
 	    ElevatorBank.selfTest();
 	}
