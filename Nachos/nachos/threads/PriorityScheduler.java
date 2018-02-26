@@ -317,6 +317,7 @@ public class PriorityScheduler extends Scheduler {
 	    // implement me
 		Lib.assertTrue(Machine.interrupt().disabled());
 		waitQueue.waitThreads.add(thread);
+		waitQueue.setDirtyBool();
 		waitQ = waitQueue;
 		if(threadList.contains(waitQueue))
 		{
