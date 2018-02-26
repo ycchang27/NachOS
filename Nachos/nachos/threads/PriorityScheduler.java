@@ -279,6 +279,7 @@ public class PriorityScheduler extends Scheduler {
 			if (effectiveP > effectivePriority)
 				effectivePriority = effectiveP;
 			}
+			dirtyBit = false; 
 		}
 	    return effectivePriority;
 	}
