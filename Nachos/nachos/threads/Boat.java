@@ -19,24 +19,27 @@ public class Boat
 	static final int adult = 2;
 	static final int child = 1;
 
-	boolean finished = false;
+	static boolean finished = false;
 
-	Lock Oahu_pop;
-	int num_adults_at_Oahu = 0;
-	int num_children_at_Oahu = 0;
+	static Lock Oahu_pop;
+	static int num_adults_at_Oahu = 0;
+	static int num_children_at_Oahu = 0;
 
-	Lock boat_permit;
-	boolean boat_at_Oahu = true;
-	int boat_capacity = 0;
-	boolean allow_adult = false;
+	static Lock boat_permit;
+	static boolean boat_at_Oahu = true;
+	static int boat_capacity = 0;
+	static boolean allow_adult = false;
 
-	Alarm block_sync; // block_sync.waitUntil(100);
+	static Alarm block_sync; // block_sync.waitUntil(100);
 
 	public static void begin( int adults, int children, BoatGrader b )
 	{
 		// Store the externally generated autograder in a class
 		// variable to be accessible by children.
 		bg = b;
+		Oahu_pop = new Lock(); 
+		boat_permit = new Lock();
+		block_sync = new Alarm(); 
 
 		// Instantiate global variables here
 
@@ -85,7 +88,7 @@ public class Boat
 
 	static void AdultItinerary()
 	{
-		bg.initializeAdult(); //Required for autograder interface. Must be the first thing called.
+		// bg.initializeAdult(); //Required for autograder interface. Must be the first thing called.
 		//DO NOT PUT ANYTHING ABOVE THIS LINE. 
 
 		boolean at_Oahu = true;
@@ -123,10 +126,10 @@ public class Boat
 
 	static void ChildItinerary()
 	{
-		bg.initializeChild(); //Required for autograder interface. Must be the first thing called.
+		// bg.initializeChild(); //Required for autograder interface. Must be the first thing called.
 		//DO NOT PUT ANYTHING ABOVE THIS LINE.
 		
-		bool at_Oahu = true;
+		boolean at_Oahu = true;
 
 		Oahu_pop.acquire();
 		num_children_at_Oahu++;
@@ -173,7 +176,7 @@ public class Boat
 			}
 			else if (!boat_at_Oahu && !at_Oahu && boat_capacity < 2 && !finished)
 			{
-				bg.ChildRowToMolokai();
+				bg.ChildRowToOahu();
 				at_Oahu = true;
 				Oahu_pop.acquire();
 				num_children_at_Oahu++;
