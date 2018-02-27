@@ -287,7 +287,7 @@ public class PriorityScheduler extends Scheduler {
 			}
 			
 			// regarding donations
-			waitQueue.current_holder.offer(this.ePriority);
+			waitQueue.current_holder.offer(this.ePriority, thread);
 		}
 
 		// save reference to queue, noting that thread has acquired its resource
@@ -317,18 +317,27 @@ public class PriorityScheduler extends Scheduler {
 			// regarding donations:
 			if (waitQueue.current_holder != null)
 			{
-				waitQueue.current_holder.reset();
+				if (waitQueue.thread_states.contains(getThreadState(waitQueue.current_holder.donor)))
+					waitQueue.current_holder.reset();
 				waitQueue.current_holder.currently_acquired.remove(waitQueue);
 			}
 			waitQueue.current_holder = this;
+			
+			for (ThreadState t : waitQueue.thread_states)
+			{
+				offer(t.getEffectivePriority(), t.thread);
+			}
 		}
 		
 		// notes: iterate through currently_acquired and see
 		
-		public void offer(int donation)
+		public void offer(int donation, KThread donor)
 		{
 			if (donation > this.ePriority)
+			{
 				this.ePriority = donation;
+				this.donor = donor;
+			}
 		}
 		
 		public void reset()
@@ -337,7 +346,8 @@ public class PriorityScheduler extends Scheduler {
 		}
 
 		/** The thread with which this object is associated. */	   
-		protected KThread thread;
+		public KThread thread;
+		public KThread donor;
 		/** The priority of the associated thread. */
 		protected int priority;
 		public int ePriority;
