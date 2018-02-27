@@ -249,16 +249,17 @@ public class PriorityScheduler extends Scheduler {
 				currently_waiting.thread_states.add(this);
 			}
 			
-			// implement me
 			// regarding donations
 			if (currently_waiting != null)
 			{
-				for (ThreadState t : currently_waiting.thread_states)
+				if (currently_waiting.current_holder != null &&
+						currently_waiting.current_holder.donor == this)
 				{
-					if (t.donor == this)
-					{
-						t.calcEffective();
-					}
+					currently_waiting.current_holder.calcEffective();
+				}
+				else if (currently_waiting.current_holder != null)
+				{
+					currently_waiting.current_holder.offer(priority, this);
 				}
 			}
 		}
