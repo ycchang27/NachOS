@@ -250,6 +250,17 @@ public class PriorityScheduler extends Scheduler {
 			}
 			
 			// implement me
+			// regarding donations
+			if (currently_waiting != null)
+			{
+				for (ThreadState t : currently_waiting.thread_states)
+				{
+					if (t.donor == this)
+					{
+						t.calcEffective();
+					}
+				}
+			}
 		}
 
 		// add thread to waitQueue
@@ -288,7 +299,7 @@ public class PriorityScheduler extends Scheduler {
 			
 			// regarding donations
 			if (waitQueue.current_holder != null)
-				waitQueue.current_holder.offer(this.ePriority, this.thread);
+				waitQueue.current_holder.offer(this.ePriority, this);
 		}
 
 		// save reference to queue, noting that thread has acquired its resource
@@ -319,7 +330,7 @@ public class PriorityScheduler extends Scheduler {
 			if (waitQueue.current_holder != null)
 			{
 				if (waitQueue.current_holder.donor != null)
-					if (waitQueue.thread_states.contains(getThreadState(waitQueue.current_holder.donor)))
+					if (waitQueue.thread_states.contains(waitQueue.current_holder.donor))
 						waitQueue.current_holder.reset();
 				waitQueue.current_holder.currently_acquired.remove(waitQueue);
 			}
@@ -327,13 +338,23 @@ public class PriorityScheduler extends Scheduler {
 			
 			for (ThreadState t : waitQueue.thread_states)
 			{
-				offer(t.getEffectivePriority(), t.thread);
+				offer(t.getEffectivePriority(), t);
 			}
 		}
 		
 		// notes: iterate through currently_acquired and see
+		public void calcEffective()
+		{
+			for (PriorityQueue Q : currently_acquired)
+			{
+				for (ThreadState t : Q.thread_states)
+				{
+					offer(t.getEffectivePriority(), t);
+				}
+			}
+		}
 		
-		public void offer(int donation, KThread donor)
+		public void offer(int donation, ThreadState donor)
 		{
 			if (donation > this.ePriority)
 			{
@@ -349,7 +370,7 @@ public class PriorityScheduler extends Scheduler {
 
 		/** The thread with which this object is associated. */	   
 		public KThread thread;
-		public KThread donor;
+		public ThreadState donor;
 		/** The priority of the associated thread. */
 		protected int priority;
 		public int ePriority;
