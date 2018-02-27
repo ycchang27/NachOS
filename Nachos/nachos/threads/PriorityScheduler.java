@@ -287,7 +287,8 @@ public class PriorityScheduler extends Scheduler {
 			}
 			
 			// regarding donations
-			waitQueue.current_holder.offer(this.ePriority, thread);
+			if (waitQueue.current_holder != null)
+				waitQueue.current_holder.offer(this.ePriority, this.thread);
 		}
 
 		// save reference to queue, noting that thread has acquired its resource
@@ -317,8 +318,9 @@ public class PriorityScheduler extends Scheduler {
 			// regarding donations:
 			if (waitQueue.current_holder != null)
 			{
-				if (waitQueue.thread_states.contains(getThreadState(waitQueue.current_holder.donor)))
-					waitQueue.current_holder.reset();
+				if (waitQueue.current_holder.donor != null)
+					if (waitQueue.thread_states.contains(getThreadState(waitQueue.current_holder.donor)))
+						waitQueue.current_holder.reset();
 				waitQueue.current_holder.currently_acquired.remove(waitQueue);
 			}
 			waitQueue.current_holder = this;
