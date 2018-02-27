@@ -255,7 +255,6 @@ public class PriorityScheduler extends Scheduler {
 			{
 				for (ThreadState t : currently_waiting.thread_states)
 				{
-					System.out.println("ln 258");
 					if (t.donor == this)
 					{
 						t.calcEffective();
@@ -328,9 +327,8 @@ public class PriorityScheduler extends Scheduler {
 			currently_acquired.add(waitQueue);
 			
 			// regarding donations:
-			if (waitQueue.current_holder != null)
+			if (waitQueue.current_holder != null && waitQueue.current_holder != this)
 			{
-				System.out.println("ln 333");
 				waitQueue.current_holder.currently_acquired.remove(waitQueue);
 				waitQueue.current_holder.calcEffective();
 			}
@@ -338,7 +336,6 @@ public class PriorityScheduler extends Scheduler {
 			
 			for (ThreadState t : waitQueue.thread_states)
 			{
-				System.out.println("ln 341");
 				offer(t.getEffectivePriority(), t);
 			}
 		}
@@ -346,14 +343,11 @@ public class PriorityScheduler extends Scheduler {
 		// notes: iterate through currently_acquired and see
 		public void calcEffective()
 		{
-			System.out.println("ln 349");
 			reset();
 			for (PriorityQueue Q : currently_acquired)
 			{
-				System.out.println("ln 353");
 				for (ThreadState t : Q.thread_states)
 				{
-					System.out.println("ln 356");
 					offer(t.getEffectivePriority(), t);
 				}
 			}
@@ -361,7 +355,6 @@ public class PriorityScheduler extends Scheduler {
 		
 		public void offer(int donation, ThreadState donor)
 		{
-			System.out.println("ln 364");
 			if (donation > this.ePriority)
 			{
 				this.ePriority = donation;
