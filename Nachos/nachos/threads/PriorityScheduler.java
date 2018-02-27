@@ -134,15 +134,30 @@ public class PriorityScheduler extends Scheduler {
 			else
 				thread_states = new TreeSet<ThreadState>(new SortByEffectivePriority());
 		}
+		
+		public void overkill()
+		{
+			if (current_holder != null && current_holder.currently_acquired != null)
+				for (PriorityQueue p : current_holder.currently_acquired)
+				{
+					if (!p.thread_states.isEmpty())
+						for (ThreadState t : p.thread_states)
+						{
+							current_holder.offer(t.ePriority, t);
+						}
+				}
+		}
 
 		public void waitForAccess(KThread thread) {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			getThreadState(thread).waitForAccess(this);
+			overkill();
 		}
 
 		public void acquire(KThread thread) {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			getThreadState(thread).acquire(this);
+			overkill();
 		}
 
 
@@ -171,6 +186,7 @@ public class PriorityScheduler extends Scheduler {
 		 */
 		protected ThreadState pickNextThread() {
 			// implement me
+			overkill();
 			return thread_states.pollLast();
 		}
 		
@@ -399,195 +415,5 @@ public class PriorityScheduler extends Scheduler {
 		}
 		
 	}
-    
-    private static void Test1() {
-        System.out.println("// Test 1: Same Priority");
-        KThread kt[] = new KThread[5];
-        for (int i = 0; i < kt.length; i++) {
-            kt[i] = new KThread(new Runnable1(i));
-            boolean intStatus = Machine.interrupt().disable();
-            ThreadedKernel.scheduler.setPriority(kt[i], 1);
-            Machine.interrupt().restore(intStatus);
-            kt[i].fork();
-        }
-        for (int i = 0; i < kt.length; i++)
-            kt[i].join();
-    }
-    
-    private static void Test2() {
-        System.out.println("// Test 2: Different Priorities");
-        KThread kt[] = new KThread[5];
-        for (int i = 0; i < kt.length; i++) {
-            kt[i] = new KThread(new Runnable1(i));
-            boolean intStatus = Machine.interrupt().disable();
-            ThreadedKernel.scheduler.setPriority(kt[i], 7-i);
-            Machine.interrupt().restore(intStatus);
-            kt[i].fork();
-        }
-        for (int i = 0; i < kt.length; i++)
-            kt[i].join();
-    }
-    
-    private static void Test3() {
-        System.out.println("// Test 3: Priority Donation with lock");
-        Lock lock = new Lock();
-        KThread low = new KThread(new LowPriority(lock));
-        KThread med = new KThread(new MediumPriority(0));
-        KThread high = new KThread(new HighPriority(lock));
-        boolean intStatus = Machine.interrupt().disable();
-        ThreadedKernel.scheduler.setPriority(low,1);
-        ThreadedKernel.scheduler.setPriority(med,3);
-        ThreadedKernel.scheduler.setPriority(high,5);
-        Machine.interrupt().restore(intStatus);
-        low.fork();
-        KThread.yield(); // run low first, so it grabs lock
-        med.fork(); // queue med
-        high.fork(); // queue high, which is queuing for lock, so donate to low
-        KThread.yield(); // run low first
-        low.join(); // joins low first, releasing lock
-        med.join(); // joins last
-        high.join(); // joins high second, after lock is released
-    }
-    
-    private static void Test4() {
-        System.out.println("// Test 4: Threads with multiple locks");
-        Lock lock1 = new Lock();
-        Lock lock2 = new Lock();
-        Lock lock3 = new Lock();
-        KThread k1 = new KThread(new LockThread(0, lock1)); // runs before k2
-        KThread k2 = new KThread(new LockThread(1, lock1, lock2)); // runs before k4
-        KThread k3 = new KThread(new LockThread(2, lock1, lock3)); // grabs l3 first
-        KThread k4 = new KThread(new LockThread(3, lock2, lock3)); // runs after k3
-        KThread k5 = new KThread(new LockThread(4, lock3)); // donates priority 3 to k3
-        k1.fork();
-        k2.fork();
-        k3.fork();
-        k4.fork();
-        k5.fork();
-        KThread.yield();
-        boolean intStatus = Machine.interrupt().disable();
-        ThreadedKernel.scheduler.setPriority(k5,3);
-        Machine.interrupt().restore(intStatus);
-        KThread.yield();
-        k1.join();
-        k2.join();
-        k3.join();
-        k4.join();
-        k5.join();
-    }
-    
-    private static void Test5()
-    {
-    	System.out.println("// Test 5: B's test");
-    	Lock mLock = new Lock();
-    	Lock nLock = new Lock();
-    	KThread mThreads[] = new KThread[5];
-    	mThreads[0] = new KThread(new LockThread(0, mLock));
-    	mThreads[1] = new KThread(new LockThread(1, mLock));
-    	mThreads[2] = new KThread(new LockThread(2, mLock));
-    	mThreads[3] = new KThread(new LockThread(3, nLock));
-    	mThreads[4] = new KThread(new LockThread(4, mLock));
-    	boolean intStatus = Machine.interrupt().disable();
-    	mThreads[0].fork();
-    	mThreads[1].fork();
-    	mThreads[2].fork();
-    	mThreads[3].fork();
-    	mThreads[4].fork();
-    	ThreadedKernel.scheduler.setPriority(mThreads[3], 3);
-    	Machine.interrupt().restore(intStatus);
-//    	KThread.yield();
-    	mThreads[4].join();
-    	mThreads[1].join();
-    	mThreads[0].join();
-    	mThreads[2].join();
-    	mThreads[3].join();
-    }
-    
-    private static class Runnable1 implements Runnable {
-        Runnable1(int n) {
-            this.n = n;
-        }
-        public void run() {
-            for (int i = 0; i < 2; i++) {
-                System.out.println("Thread " + n);
-                KThread.yield();
-            }
-        }
-        private int n;
-    }
-    
-    private static class LowPriority implements Runnable {
-        LowPriority(Lock lock) {
-            this.lock = lock;
-        }
-        public void run() {
-            System.out.println("Low priority start");
-            lock.acquire();
-            KThread.yield();
-            System.out.println("Low priority end");
-            lock.release();
-        }
-        private Lock lock;
-    }
-    
-    private static class MediumPriority implements Runnable {
-        MediumPriority(int n) {
-            this.n = n;
-        }
-        public void run() {
-            KThread.yield();
-            System.out.println("Medium priority complete");
-        }
-        private int n;
-    }
-    
-    private static class HighPriority implements Runnable {
-        HighPriority(Lock lock) {
-            this.lock = lock;
-        }
-        public void run() {
-            System.out.println("High priority sleep");
-            lock.acquire();
-            System.out.println("High priority wake");
-            lock.release();
-        }
-        private Lock lock;
-    }
-    
-    private static class LockThread implements Runnable {
-        LockThread(int n, Lock lock) {
-            this.n = n;
-            this.lock = lock;
-        }
-        LockThread(int n, Lock lock, Lock lock2) {
-            this.n = n;
-            this.lock = lock;
-            this.lock2 = lock2;
-        }
-        public void run() {
-            System.out.println("Thread " + n + " sleep");
-            lock.acquire();
-            if (lock2 != null)
-                lock2.acquire();
-            KThread.yield();
-            System.out.println("Thread " + n + " wake");
-            lock.release();
-            if (lock2 != null)
-                lock2.release();
-        }
-        
-        private int n;
-        private Lock lock;
-        private Lock lock2;
-    }
-    
-    public static void selfTest() {
-        System.out.println("//** Priority Scheduler Testing Begin **//");
-        Test1();
-        Test2();
-        Test3();
-        Test4();
-        Test5();
-        System.out.println("//** Priority Scheduler Testing End **//");
-    }
+    public static void selfTest(){return;}
 }
