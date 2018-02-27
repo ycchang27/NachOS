@@ -326,7 +326,7 @@ public class PriorityScheduler extends Scheduler {
 		
 		public void calcEffective(PriorityQueue acquiringQueue)
 		{
-			if (acquiringQueue.current_holder == null) return;
+			if (acquiringQueue.current_holder == null || acquiringQueue.thread_states.isEmpty()) return;
 			ThreadState possible_donor = acquiringQueue.thread_states.last();
 			if (possible_donor.getEffectivePriority() > acquiringQueue.current_holder.getEffectivePriority())
 			{
