@@ -137,15 +137,19 @@ public class PriorityScheduler extends Scheduler {
 		
 		public void overkill()
 		{
-			if (current_holder != null && current_holder.currently_acquired != null)
+			if (current_holder != null)
+			{
+				current_holder.calcEffective();
 				for (PriorityQueue p : current_holder.currently_acquired)
 				{
 					if (!p.thread_states.isEmpty())
 						for (ThreadState t : p.thread_states)
 						{
+							t.calcEffective();
 							current_holder.offer(t.ePriority, t);
 						}
 				}
+			}
 		}
 
 		public void waitForAccess(KThread thread) {
@@ -266,18 +270,20 @@ public class PriorityScheduler extends Scheduler {
 			}
 			
 			// regarding donations
+//			if (currently_waiting != null)
+//			{
+//				if (currently_waiting.current_holder != null &&
+//						currently_waiting.current_holder.donor == this)
+//				{
+//					currently_waiting.current_holder.calcEffective();
+//				}
+//				else if (currently_waiting.current_holder != null)
+//				{
+//					currently_waiting.current_holder.offer(priority, this);
+//				}
+//			}
 			if (currently_waiting != null)
-			{
-				if (currently_waiting.current_holder != null &&
-						currently_waiting.current_holder.donor == this)
-				{
-					currently_waiting.current_holder.calcEffective();
-				}
-				else if (currently_waiting.current_holder != null)
-				{
-					currently_waiting.current_holder.offer(priority, this);
-				}
-			}
+				currently_waiting.overkill();
 		}
 
 		// add thread to waitQueue
@@ -297,7 +303,6 @@ public class PriorityScheduler extends Scheduler {
 		 * @see	nachos.threads.ThreadQueue#waitForAccess
 		 */
 		public void waitForAccess(PriorityQueue waitQueue) {
-			// implement me
 			if (currently_waiting != null)
 			{
 				currently_waiting.thread_states.remove(this); // mine: replace old waitQueue with new one; hers: ignore new one
@@ -315,8 +320,9 @@ public class PriorityScheduler extends Scheduler {
 			}
 			
 			// regarding donations
-			if (waitQueue.current_holder != null)
-				waitQueue.current_holder.offer(this.ePriority, this);
+//			if (waitQueue.current_holder != null)
+//				waitQueue.current_holder.offer(this.ePriority, this);
+			waitQueue.overkill();
 		}
 
 		// save reference to queue, noting that thread has acquired its resource
@@ -338,7 +344,8 @@ public class PriorityScheduler extends Scheduler {
 			if (currently_waiting != null)
 			{
 				currently_waiting.thread_states.remove(this);
-				currently_waiting = null;
+				if (currently_waiting == waitQueue)
+					currently_waiting = null;
 			}
 			waitQueue.thread_states.remove(this);
 			currently_acquired.add(waitQueue);
@@ -351,23 +358,25 @@ public class PriorityScheduler extends Scheduler {
 			}
 			waitQueue.current_holder = this;
 			
-			for (ThreadState t : waitQueue.thread_states)
-			{
-				offer(t.getEffectivePriority(), t);
-			}
+//			for (ThreadState t : waitQueue.thread_states)
+//			{
+//				offer(t.getEffectivePriority(), t);
+//			}
+			waitQueue.overkill();
 		}
 		
 		// notes: iterate through currently_acquired and see
 		public void calcEffective()
 		{
 			reset();
-			for (PriorityQueue Q : currently_acquired)
-			{
-				for (ThreadState t : Q.thread_states)
+			if (currently_acquired != null)
+				for (PriorityQueue Q : currently_acquired)
 				{
-					offer(t.getEffectivePriority(), t);
+					for (ThreadState t : Q.thread_states)
+					{
+						offer(t.getEffectivePriority(), t);
+					}
 				}
-			}
 		}
 		
 		public void offer(int donation, ThreadState donor)
