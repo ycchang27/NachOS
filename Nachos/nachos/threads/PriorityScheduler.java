@@ -225,7 +225,7 @@ public class PriorityScheduler extends Scheduler {
 		 */
 		public int getEffectivePriority() {
 			// implement me
-			return priority;
+			return ePriority;
 		}
 
 		// make sure queue is ordered properly after this function is called
@@ -324,13 +324,15 @@ public class PriorityScheduler extends Scheduler {
 			calcEffective(waitQueue);
 		}
 		
+		// notes: iterate through currently_acquired and see
+
 		public void calcEffective(PriorityQueue acquiringQueue)
 		{
 			if (acquiringQueue.current_holder == null || acquiringQueue.thread_states.isEmpty()) return;
 			ThreadState possible_donor = acquiringQueue.thread_states.last();
-			if (possible_donor.getEffectivePriority() > acquiringQueue.current_holder.getEffectivePriority())
+			if (possible_donor.getPriority() > acquiringQueue.current_holder.getPriority())
 			{
-				acquiringQueue.current_holder.ePriority = possible_donor.getEffectivePriority();
+				acquiringQueue.current_holder.ePriority = possible_donor.getPriority();
 			}
 		}
 		
@@ -410,13 +412,13 @@ public class PriorityScheduler extends Scheduler {
         ThreadedKernel.scheduler.setPriority(high,5);
         Machine.interrupt().restore(intStatus);
         low.fork();
-        KThread.yield();
-        med.fork();
-        high.fork();
-        KThread.yield();
-        low.join();
-        med.join();
-        high.join();
+        KThread.yield(); // run low first, so it grabs lock
+        med.fork(); // queue med
+        high.fork(); // queue high, which is queuing for lock, so donate to low
+        KThread.yield(); // run low first
+        low.join(); // joins low first, releasing lock
+        med.join(); // joins last
+        high.join(); // joins high second, after lock is released
     }
     
     private static void Test4() {
@@ -424,11 +426,11 @@ public class PriorityScheduler extends Scheduler {
         Lock lock1 = new Lock();
         Lock lock2 = new Lock();
         Lock lock3 = new Lock();
-        KThread k1 = new KThread(new LockThread(0, lock1));
-        KThread k2 = new KThread(new LockThread(1, lock1, lock2));
-        KThread k3 = new KThread(new LockThread(2, lock1, lock3));
-        KThread k4 = new KThread(new LockThread(3, lock2, lock3));
-        KThread k5 = new KThread(new LockThread(4, lock3));
+        KThread k1 = new KThread(new LockThread(0, lock1)); // runs before k2
+        KThread k2 = new KThread(new LockThread(1, lock1, lock2)); // runs before k4
+        KThread k3 = new KThread(new LockThread(2, lock1, lock3)); // grabs l3 first
+        KThread k4 = new KThread(new LockThread(3, lock2, lock3)); // runs after k3
+        KThread k5 = new KThread(new LockThread(4, lock3)); // donates priority 3 to k3
         k1.fork();
         k2.fork();
         k3.fork();
@@ -444,6 +446,33 @@ public class PriorityScheduler extends Scheduler {
         k3.join();
         k4.join();
         k5.join();
+    }
+    
+    private static void Test5()
+    {
+    	System.out.println("// Test 5: B's test");
+    	Lock mLock = new Lock();
+    	Lock nLock = new Lock();
+    	KThread mThreads[] = new KThread[5];
+    	mThreads[0] = new KThread(new LockThread(0, mLock));
+    	mThreads[1] = new KThread(new LockThread(1, mLock));
+    	mThreads[2] = new KThread(new LockThread(2, mLock));
+    	mThreads[3] = new KThread(new LockThread(3, nLock));
+    	mThreads[4] = new KThread(new LockThread(4, mLock));
+    	boolean intStatus = Machine.interrupt().disable();
+    	mThreads[0].fork();
+    	mThreads[1].fork();
+    	mThreads[2].fork();
+    	mThreads[3].fork();
+    	mThreads[4].fork();
+    	ThreadedKernel.scheduler.setPriority(mThreads[3], 3);
+    	Machine.interrupt().restore(intStatus);
+//    	KThread.yield();
+    	mThreads[4].join();
+    	mThreads[1].join();
+    	mThreads[0].join();
+    	mThreads[2].join();
+    	mThreads[3].join();
     }
     
     private static class Runnable1 implements Runnable {
@@ -530,6 +559,7 @@ public class PriorityScheduler extends Scheduler {
         Test2();
         Test3();
         Test4();
+        Test5();
         System.out.println("//** Priority Scheduler Testing End **//");
     }
 }
