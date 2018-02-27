@@ -287,7 +287,7 @@ public class PriorityScheduler extends Scheduler {
 			}
 			
 			// regarding donations
-			calcEffective(waitQueue);
+			waitQueue.current_holder.offer(this.ePriority);
 		}
 
 		// save reference to queue, noting that thread has acquired its resource
@@ -321,19 +321,14 @@ public class PriorityScheduler extends Scheduler {
 				waitQueue.current_holder.currently_acquired.remove(waitQueue);
 			}
 			waitQueue.current_holder = this;
-			calcEffective(waitQueue);
 		}
 		
 		// notes: iterate through currently_acquired and see
-
-		public void calcEffective(PriorityQueue acquiringQueue)
+		
+		public void offer(int donation)
 		{
-			if (acquiringQueue.current_holder == null || acquiringQueue.thread_states.isEmpty()) return;
-			ThreadState possible_donor = acquiringQueue.thread_states.last();
-			if (possible_donor.getPriority() > acquiringQueue.current_holder.getPriority())
-			{
-				acquiringQueue.current_holder.ePriority = possible_donor.getPriority();
-			}
+			if (donation > this.ePriority)
+				this.ePriority = donation;
 		}
 		
 		public void reset()
