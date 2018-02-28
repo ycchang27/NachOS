@@ -155,11 +155,13 @@ public class PriorityScheduler extends Scheduler {
 		public void waitForAccess(KThread thread) {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			getThreadState(thread).waitForAccess(this);
+			overkill();
 		}
 
 		public void acquire(KThread thread) {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			getThreadState(thread).acquire(this);
+			overkill();
 		}
 
 
@@ -323,7 +325,7 @@ public class PriorityScheduler extends Scheduler {
 			if (currently_acquired == null) currently_acquired = new HashSet<PriorityQueue>();
 			if (currently_waiting != null)	// stop waiting, since thread has acquired it
 			{
-//				currently_waiting.thread_states.remove(this);
+				currently_waiting.thread_states.remove(this);
 				if (currently_waiting == waitQueue)
 					currently_waiting = null;
 			}
