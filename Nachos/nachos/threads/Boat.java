@@ -93,7 +93,7 @@ public class Boat
 			// if empty boat and self are on Oahu
 			// and adults have been flagged to use boat
 			// and the number of children at Oahu < 2 (because children are higher priority)
-			if (boat_at_Oahu && at_Oahu && boat_capacity == 0 && allow_adult && !finished && num_children_at_Oahu < 2)
+			if (boat_at_Oahu && at_Oahu && boat_capacity == 0 && (allow_adult || num_children_at_Oahu == 0) && !finished && num_children_at_Oahu < 2)
 			{
 				bg.AdultRowToMolokai(); // go to Molokai
 				Oahu_pop.acquire();
