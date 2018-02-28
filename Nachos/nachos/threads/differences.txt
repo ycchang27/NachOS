@@ -1,0 +1,455 @@
+3a4,5
+> import java.util.LinkedList; // +hy+
+> import java.util.Iterator;   // +hy+
+8d9
+< import java.util.LinkedList;
+45a47
+>     //System.out.print("ThreadQueue.newThreadQueue: " + transferPriority + "\n");  // debug
+57c59
+< 		       
+---
+> 
+65c67
+< 		   priority <= priorityMaximum);
+---
+>                        priority <= priorityMaximum);
+98a101
+> 
+129,185c132,275
+< 	PriorityQueue(boolean transferPriority) {
+< 	    this.transferPriority = transferPriority;
+< 	}
+< 
+< 	public void waitForAccess(KThread thread) {
+< 	    Lib.assertTrue(Machine.interrupt().disabled());
+< 	    getThreadState(thread).waitForAccess(this);
+< 	}
+< 
+< 	public void acquire(KThread thread) {
+< 	    Lib.assertTrue(Machine.interrupt().disabled());
+< 	    if (this.owner != null && this.transferPriority == true)
+< 	    	this.owner.threadList.remove(this);
+< 	    this.owner = getThreadState(thread);
+< 	    getThreadState(thread).acquire(this);
+< 	}
+< 
+< 	public KThread nextThread() {
+< 	    Lib.assertTrue(Machine.interrupt().disabled());
+< 	    // implement me
+< 	    if (waitThreads.isEmpty() == true)
+< 	    {
+< 	    	return null;
+< 	    }
+< 	 
+< 	    if ((this.owner != null) && (this.transferPriority == true)  )
+< 	    {
+< 	    	this.owner.threadList.remove(this);
+< 	    }
+< 	    
+< 	    ThreadState headThread = pickNextThread();
+< 	    if (headThread !=null)
+< 	    {
+< 	    	waitThreads.remove(headThread.thread);
+< 	    	headThread.acquire(this);
+< 	    }
+< 	    return headThread.thread;
+< 	}
+< 
+< 	public int getEffectivePriority() {
+<   	    if (transferPriority == false)
+< 	        return priorityMinimum;
+<   	    
+<         if (dirtyBit == true) {
+<             effectivePriority = priorityMinimum;
+<             for (Iterator<KThread> it = waitThreads.iterator(); it.hasNext(); ) {
+< 	            KThread nextthread = it.next();
+< 	            int eF = getThreadState(nextthread).getEffectivePriority();
+< 	            if (eF > effectivePriority)
+< 	            {
+< 	                effectivePriority = eF;
+< 	            }
+< 	        }
+< 	        dirtyBit = false;
+< 	    }
+<         return effectivePriority;
+<     }
+---
+>         PriorityQueue(boolean transferPriority) {
+>             this.transferPriority = transferPriority;
+>         }
+> 
+>         public void waitForAccess(KThread thread) {
+>             Lib.assertTrue(Machine.interrupt().disabled());
+>             getThreadState(thread).waitForAccess(this);
+>         }
+> 
+>         public void acquire(KThread thread) {
+>             Lib.assertTrue(Machine.interrupt().disabled());
+>                 
+>             ThreadState state = getThreadState(thread); // hy+
+>              
+>             // If I have a holder and I transfer priority
+>             // remove myself from the holder's resource list
+>             if (this.holder != null && this.transferPriority) {
+>                 this.holder.myResource.remove(this);
+>             }
+>              
+>             this.holder = state;              // hy+
+>              
+>             state.acquire(this);
+>         }
+> 
+>         public KThread nextThread() {
+>             Lib.assertTrue(Machine.interrupt().disabled());
+>             
+>             if (waitQueue.isEmpty())
+>                 return null;
+>             
+>             // if I have a holder and I transfer priority, 
+>             // remove myself from the holder's resource list
+>             if (this.holder != null && this.transferPriority)  
+>             {
+>                 this.holder.myResource.remove(this);
+>             }
+> 
+>             KThread firstThread = pickNextThread();
+>             if (firstThread != null) {
+>                 waitQueue.remove(firstThread);
+>                 getThreadState(firstThread).acquire(this);
+>             }
+>             
+>             return firstThread;
+>         }
+> 
+>         /**
+>          * Return the next thread that <tt>nextThread()</tt> would return,
+>          * without modifying the state of this queue.
+>          *
+>          * @return	the next thread that <tt>nextThread()</tt> would
+>          *		return.
+>          */
+>         protected KThread pickNextThread() {
+>             KThread nextThread = null;
+> 
+>             //this.print(); // debug
+> 
+>             // System.out.print("Inside 'pickNextThread:' transferPriority: " + transferPriority + "\n"); // debug
+> 
+>             for (Iterator<KThread> ts = waitQueue.iterator(); ts.hasNext();) {  
+>                 KThread thread = ts.next(); 
+>                 int priority = getThreadState(thread).getEffectivePriority();
+>                 
+>                 if (nextThread == null || priority > getThreadState(nextThread).getEffectivePriority()) { 
+>                     nextThread = thread;
+>                 }
+>             }
+> 
+>             // System.out.print("Inside 'pickNextThread:' return Thread: " 
+>             //        + nextThread + "\n"); // debug
+>             
+>             return nextThread;
+>         }
+>         
+>         public int getEffectivePriority() {
+> 
+>             // System.out.print("[Inside getEffectivePriority] transferPriority: " + transferPriority + "\n"); // debug
+> 
+>             // if do not transfer priority, return minimum priority
+>             if (transferPriority == false) {
+>             // System.out.print("Inside 'getEffectivePriority:' false branch\n" ); // debug
+>                 return priorityMinimum;
+>             }
+> 
+>             if (dirty) {
+>                 effectivePriority = priorityMinimum; 
+>                 for (Iterator<KThread> it = waitQueue.iterator(); it.hasNext();) {  
+>                     KThread thread = it.next(); 
+>                     int priority = getThreadState(thread).getEffectivePriority();
+>                     if ( priority > effectivePriority) { 
+>                         effectivePriority = priority;
+>                     }
+>                 }
+>                 dirty = false;
+>             }
+> 
+>             return effectivePriority;
+>         }
+> 
+>         public void setDirty() {
+>             if (transferPriority == false) {
+>                 return;
+>             }
+> 
+>             dirty = true;
+> 
+>             if (holder != null) {
+>                 holder.setDirty();
+>             }
+>         }
+> 
+>         public void print() {
+>             Lib.assertTrue(Machine.interrupt().disabled());
+>             // implement me (if you want)
+>             for (Iterator<KThread> it = waitQueue.iterator(); it.hasNext();) {  
+>                 KThread currentThread = it.next(); 
+>                 int  priority = getThreadState(currentThread).getPriority();
+> 
+>                 System.out.print("Thread: " + currentThread 
+>                                     + "\t  Priority: " + priority + "\n");
+>             }
+>         }
+> 
+>         /**
+>          * <tt>true</tt> if this queue should transfer priority from waiting
+>          * threads to the owning thread.
+>          */
+>         public boolean transferPriority;
+> 
+>         /** The queue  waiting on this resource */
+>         private LinkedList<KThread> waitQueue = new LinkedList<KThread>();  // hy+
+> 
+>         /** The ThreadState corresponds to the holder of the resource */
+>         private ThreadState holder = null;             // hy+
+> 
+>         /** Set to true when a new thread is added to the queue, 
+>          *  or any of the queues in the waitQueue flag themselves as dirty */
+>         private boolean dirty;                  // hy+ 
+> 
+>         /** The cached highest of the effective priorities in the waitQueue. 
+>          *  This value is invalidated while dirty is true */
+>         private int effectivePriority; 
+187,221c277
+< 	/**
+< 	 * Return the next thread that <tt>nextThread()</tt> would return,
+< 	 * without modifying the state of this queue.
+< 	 *
+< 	 * @return	the next thread that <tt>nextThread()</tt> would
+< 	 *		return.
+< 	 */
+< 	protected ThreadState pickNextThread() {
+< 	    // implement me
+< 		KThread nextThread = null;
+< 		
+< 		for (Iterator<KThread> i = waitThreads.iterator(); i.hasNext();)
+< 		{
+< 			KThread threadstate = i.next();
+< 			if( nextThread == null ||getThreadState(threadstate).getEffectivePriority() > getThreadState(nextThread).getEffectivePriority() )
+< 			{
+< 				nextThread = threadstate;
+< 			}
+< 		}
+< 	    return getThreadState(nextThread);
+< 	}
+< 	public void setDirtyBool()
+< 	{
+< 		if (transferPriority == false)
+< 			return;
+< 		
+< 		dirtyBit = true;
+< 		if (owner !=null)
+< 			owner.setDirtyBool();
+< 	}
+< 	
+< 	public void print() {
+< 	    Lib.assertTrue(Machine.interrupt().disabled());
+< 	    // implement me (if you want)
+< 	}
+---
+>     } /* PriorityQueue */
+223,234d278
+< 	/**
+< 	 * <tt>true</tt> if this queue should transfer priority from waiting
+< 	 * threads to the owning thread.
+< 	 */
+< 	public boolean transferPriority;
+< 	//variables needed
+< 	protected ThreadState owner = null;
+< 	protected LinkedList<KThread> waitThreads = new LinkedList<KThread>();
+< 	protected boolean dirtyBit = false;
+< 	protected int effectivePriority;
+< 	
+<     }
+243a288
+> 
+271,284c316,330
+< 	    // implement me
+< 		effectivePriority = this.priority;
+< 		if(dirtyBit == true)
+< 		{
+< 			for(Iterator<PriorityQueue> i = threadList.iterator(); i.hasNext();)
+< 			{
+< 			PriorityQueue priorQ = i.next();
+< 			int effectiveP = priorQ.getEffectivePriority();
+< 			if (effectiveP > effectivePriority)
+< 				effectivePriority = effectiveP;
+< 			}
+< 			dirtyBit = false; 
+< 		}
+< 	    return effectivePriority;
+---
+> 
+>         int maxEffective = this.priority;
+> 
+>         // Implement on 10/15/2013
+>         if (dirty) {
+>             for (Iterator<ThreadQueue> it = myResource.iterator(); it.hasNext();) {  
+>                 PriorityQueue pg = (PriorityQueue)(it.next()); 
+>                 int effective = pg.getEffectivePriority();
+>                 if (maxEffective < effective) {
+>                     maxEffective = effective;
+>                 }
+>             }
+>         }
+>             
+> 	    return maxEffective;
+294c340
+< 		return;
+---
+>             return;
+298,300c344
+< 	    // implement me
+< 	    setDirtyBool();
+< 		
+---
+>         setDirty();
+316,325c360,376
+< 		
+< 	    // implement me
+< 		Lib.assertTrue(Machine.interrupt().disabled());
+< 		waitQueue.waitThreads.add(thread);
+< 		waitQ = waitQueue;
+< 		if(threadList.contains(waitQueue))
+< 		{
+< 			threadList.remove(waitQueue);
+< 			waitQueue.owner = null;
+< 		}
+---
+>         
+> 	    Lib.assertTrue(Machine.interrupt().disabled());
+> 	    Lib.assertTrue(waitQueue.waitQueue.indexOf(thread) == -1);
+> 
+> 	    waitQueue.waitQueue.add(thread);
+>         waitQueue.setDirty();
+> 
+>         // set waitingOn
+>         waitingOn = waitQueue;
+> 
+>         // if the waitQueue was previously in myResource, remove it 
+>         // and set its holder to null
+>         // When will this IF statement be executed?
+>         if (myResource.indexOf(waitQueue) != -1) {
+>             myResource.remove(waitQueue);
+>             waitQueue.holder = null;
+>         }
+340,359c391,430
+< 		Lib.assertTrue(Machine.interrupt().disabled());
+< 		threadList.add(waitQueue);
+< 		if (waitQueue == waitQ)
+< 			waitQ = null;
+< 		setDirtyBool();
+< 		
+< 	}
+< 	public void setDirtyBool()
+< 	{
+< 		if (dirtyBit == true)
+< 			return;
+< 		
+< 		dirtyBit = true;
+< 		PriorityQueue tmp = waitQ;
+< 		if (tmp != null)
+< 		{
+< 			tmp.setDirtyBool();
+< 		}
+< 	}
+< 	
+---
+>         
+>         // [begin] hy, 9/20/2013
+> 	    Lib.assertTrue(Machine.interrupt().disabled());
+> 	    // Lib.assertTrue(waitQueue.waitQueue.isEmpty());
+>         // [end] hy, 9/20/2013
+>         
+>         // add waitQueue to myResource list
+>         myResource.add(waitQueue);
+>         
+>         // clean waitingOn if waitQueue is just waiting on
+>         if (waitQueue == waitingOn) {
+>             waitingOn = null;
+>         }
+> 
+>         // effective priority may be varied, set dirty flag
+>         setDirty();
+> 	}	
+> 
+>     /**
+>      * ThreadState.setDirty Set the dirty flag, then call setdirty() on each thread
+>      * of priority queue that the thread is waiting for.
+>      *
+>      * ThreadState.setDirty and PriorityQueue.setDirty would invoke each other, they 
+>      * are mutually recursive.
+>      *
+>      */
+>     public void setDirty() {
+>         if (dirty) {
+>             return;
+>         }
+> 
+>         dirty = true;
+> 
+>         PriorityQueue pg = (PriorityQueue)waitingOn;
+>         if (pg != null) {
+>             pg.setDirty();
+>         }
+> 
+>     }
+> 
+361a433
+> 
+364,373d435
+< 	
+< 	//new variables needed
+< 	protected PriorityQueue waitQ;
+< 	
+< 	protected LinkedList<PriorityQueue> threadList = new LinkedList<PriorityQueue>();
+< 	protected boolean dirtyBit = false;
+< 	protected int effectivePriority;
+< 	
+< 	
+< 	
+375,376c437
+< 	
+<     }
+---
+> 	protected int effectivePriority;            // hy+
+378,388c439,441
+< 	public static void selfTest() 
+< 	{
+< 		//System.out.println("---------------Priority Scheduler Test---------------");
+< 		psTest1();
+< 		
+< 		
+< 	}
+< 	public static void psTest1()
+< 	{
+< 		//System.out.println("... Running Priority Scheduler Test 1 (Different Priorities) ...");
+< 	
+---
+>     /** Collection of PriorityQueues that signify the Locks or other
+>      *  resource that this thread currently holds */
+>     protected LinkedList<ThreadQueue> myResource = new LinkedList<ThreadQueue>();  // hy+
+389a443,444
+>     /** PriorityQueue corresponding to resources that this thread has attepmted to acquire but could not */
+>     protected ThreadQueue waitingOn; 
+391,394c446,451
+< 	}
+< 	
+< 	
+< }
+\ No newline at end of file
+---
+>     /** Set to true when this thread's priority is changed, 
+>      * or when one of the queues in myResources flags itself as dirty */
+>     private boolean dirty = false;                  // hy+ 
+> 
+>     }
+> }

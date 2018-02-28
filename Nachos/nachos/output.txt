@@ -1,0 +1,93 @@
+make[1]: Entering directory `/home/S18/3L/s18-3l-g4/proj1/CSE-150-OS/Nachos'
+make[1]: Nothing to be done for `studentclasses_helper'.
+make[1]: Leaving directory `/home/S18/3L/s18-3l-g4/proj1/CSE-150-OS/Nachos'
+
+Running test ThreadGrader1.a...
+Test ThreadGrader1.a succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader1.b...
+Test ThreadGrader1.b succeeds.
+
+----------------------------------------
+
+
+Running test BoatGrader2.a...
+Test BoatGrader2.a succeeds.
+
+----------------------------------------
+
+
+Running test BoatGrader2.b...
+Test BoatGrader2.b succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader2.a...
+Test ThreadGrader2.a succeeds.
+
+----------------------------------------
+
+Running test ThreadGrader2.b...
+Test ThreadGrader2.b succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader2.c...
+Test ThreadGrader2.c succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader3.a...
+Test ThreadGrader3.a succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader3.b...
+Test ThreadGrader3.b succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader4.a...
+Test ThreadGrader4.a succeeds.
+
+----------------------------------------
+
+Running test ThreadGrader4.b...
+Test ThreadGrader4.b succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader5.a...
+Test ThreadGrader5.a succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader5.c...
+Test ThreadGrader5.c succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader6a.a...
+Test ThreadGrader6a.a succeeds.
+
+----------------------------------------
+
+
+Running test ThreadGrader6a.b...
+Test ThreadGrader6a.b succeeds.
+
+----------------------------------------
+
+
+<<All tests passed.
