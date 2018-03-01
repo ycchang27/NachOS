@@ -12,7 +12,7 @@ public class Boat
 		BoatGrader b = new BoatGrader();
 
 		System.out.println("\n ***Testing Boats with only 2 children***");
-		begin(115, 115, b);
+		begin(0, 2, b);
 	}
 
 	static final int adult = 2; // an adult takes up the boat's entire capacity
