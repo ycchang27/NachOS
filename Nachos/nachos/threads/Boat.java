@@ -12,7 +12,7 @@ public class Boat
 		BoatGrader b = new BoatGrader();
 
 		System.out.println("\n ***Testing Boats with only 2 children***");
-		begin(0, 2, b);
+		begin(115, 115, b);
 	}
 
 	static final int adult = 2; // an adult takes up the boat's entire capacity
@@ -31,6 +31,9 @@ public class Boat
 
 	static Alarm block_sync; // used to attempt block synchronization after spawning threads
 
+	static Condition spawning;
+	static Condition finishing;
+	
 	public static void begin( int adults, int children, BoatGrader b )
 	{
 		// Store the externally generated autograder in a class
@@ -41,6 +44,8 @@ public class Boat
 		Oahu_pop = new Lock();
 		boat_permit = new Lock();
 		block_sync = new Alarm();
+		spawning = new Condition(Oahu_pop);
+		finishing = new Condition(boat_permit);
 		
 		Runnable A = new Runnable() {
 			public void run() {
@@ -82,6 +87,7 @@ public class Boat
 
 		Oahu_pop.acquire();
 		num_adults_at_Oahu++; // atomically increment the population of adults at Oahu
+		spawning.sleep();
 		Oahu_pop.release();
 
 		block_sync.waitUntil(100); // block synchronization
@@ -102,15 +108,15 @@ public class Boat
 				if ((num_adults_at_Oahu + num_children_at_Oahu) == 0) // if nobody left on Oahu
 				{
 					finished = true; // flag other threads to finish
+					finishing.wakeAll();
 				}
 				at_Oahu = false; // no longer at Oahu
 				boat_at_Oahu = false; // nor is the boat
 				allow_adult = false; // used up permission
 			}
+			if (!finished && !at_Oahu) finishing.sleep();
 			boat_permit.release(); // release boat lock
-			KThread.yield(); // yield to another thread
 		}
-
 		return; // finish
 	}
 
@@ -150,6 +156,7 @@ public class Boat
 					}
 					boat_capacity = 0; // empty out boat
 					boat_at_Oahu = false; // boat is now at Molokai
+					finishing.wakeAll();
 				}
 				else if (boat_capacity == 2) // if boat is full
 				{
@@ -174,13 +181,14 @@ public class Boat
 				bg.ChildRowToOahu(); // go back to Oahu
 				at_Oahu = true; // now at Oahu
 				Oahu_pop.acquire();
+				spawning.wakeAll();
 				num_children_at_Oahu++; // atomically increment number of children at Oahu
 				Oahu_pop.release();
 				boat_at_Oahu = true; // boat is now at Oahu
 				allow_adult = true; // flag that an adult may go to Molokai
 			}
 			boat_permit.release(); // release boat lock
-			KThread.yield(); // yield to another thread
+			if (!finished) KThread.yield(); // yield to another thread
 		}
 
 		return; // finish
