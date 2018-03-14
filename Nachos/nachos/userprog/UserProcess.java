@@ -27,18 +27,18 @@ public class UserProcess {
 		pageTable = new TranslationEntry[numPhysPages];
 		for (int i=0; i<numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i,i, true,false,false,false); 
-		
+
 		// initialize the array of processes (OpenFiles)
 		processList = new OpenFile[MAX_NUM_OPENFILES];
-		
+
 		// specify index 0 as reader and 1 as the writer
 		processList[0] = new OpenFile(UserKernel.fileSystem, "System Reader");
 		processList[1] = new OpenFile(UserKernel.fileSystem, "System Writer");
-		
+
 		// make the console input/output available
 		UserKernel.console.openForReading();
 		UserKernel.console.openForWriting();
-		
+
 		// set up next avail index for processList
 		nextAvailFileIndex = 2;	// because 0 and 1 are taken 
 	}
@@ -359,7 +359,7 @@ public class UserProcess {
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
 		return 0;
 	}
-	
+
 	/**
 	 * Handle the create system call.
 	 */
@@ -367,12 +367,12 @@ public class UserProcess {
 		// find the file name and search for the file in the file system
 		String fileName = readVirtualMemoryString(vaddr, MAX_NUM_VIRTUAL_ARR_LENGTH);
 		OpenFile file = UserKernel.fileSystem.open(fileName, false);
-		
+
 		// do nothing if the file already exists
 		if(file != null) {
 			return -1;
 		}
-		
+
 		// if not, create the file and return its index (fileDescriptor)
 		file = new OpenFile(UserKernel.fileSystem, fileName);
 		processList[nextAvailFileIndex] = file;
@@ -386,12 +386,12 @@ public class UserProcess {
 		// find the file name and search for the file in the file system
 		String fileName = readVirtualMemoryString(vaddr, MAX_NUM_VIRTUAL_ARR_LENGTH);
 		OpenFile file = UserKernel.fileSystem.open(fileName, false);
-		
+
 		// do nothing if the file doesn't exist
 		if(file == null) {
 			return -1;
 		}
-		
+
 		// find the index of the OpenFile in the processList
 		// start at 2 because 0 and 1 are taken (console input and output)
 		for(int fileDescriptor = 2; fileDescriptor < MAX_NUM_OPENFILES; fileDescriptor ++) {
@@ -400,11 +400,11 @@ public class UserProcess {
 				return fileDescriptor;
 			}
 		}
-		
+
 		// this should not be called (unexpected error)
 		return -1;
 	}
-	
+
 	private static final int
 	syscallHalt = 0,
 	syscallExit = 1,
@@ -419,14 +419,14 @@ public class UserProcess {
 
 	/** Max length for virtual memory */
 	private static final int MAX_NUM_VIRTUAL_ARR_LENGTH = 256;
-	
+
 	/** Array of "processes", which can be traversed by an index called "file descriptor" */
 	private OpenFile[] processList;
-	
+
 	/** processList variables*/
 	private static final int MAX_NUM_OPENFILES = 16;
 	private int nextAvailFileIndex;
-	
+
 	/**
 	 * Handle a syscall exception. Called by <tt>handleException()</tt>. The
 	 * <i>syscall</i> argument identifies which syscall the user executed:
@@ -459,17 +459,30 @@ public class UserProcess {
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
+		// case syscallExit:
+		// 	return handleExit(a0);
+		// case syscallExec:
+		// 	return handleExec(a0, a1, a2);
+		// case syscallJoin:
+		// 	return handleJoin(a0, a1);
 		case syscallCreate:
 			return handleCreate(a0);
 		case syscallOpen:
 			return handleOpen(a0);
+		// case syscallRead:
+		// 	return handleRead(a0, a1, a2);
+		// case syscallWrite:
+		// 	return handleWrite(a0, a1, a2);
+		// case syscallClose:
+		//  return handleClose(a0);
+		// case syscallUnlink:
+		//  return handleUnlink(a0);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
 		}
 		return 0;
 	}
-
 	/**
 	 * Handle a user exception. Called by
 	 * <tt>UserKernel.exceptionHandler()</tt>. The
