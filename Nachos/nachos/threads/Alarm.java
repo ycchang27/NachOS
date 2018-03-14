@@ -106,7 +106,7 @@ public class Alarm {
 		Lib.debug(dbgAlarm, "Exit Alarm.selfTest");
 	}
 
-	private static final char dbgAlarm = 'a';	// char for Lib.debug print tool
+	private static final char dbgAlarm = 'z';	// char for Lib.debug print tool
 
 	/**
 	 * Alarm's Data structure that manages sleeping threads
