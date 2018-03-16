@@ -31,6 +31,14 @@ public class UserProcess {
 		// initialize the array of processes (OpenFiles)
 		processList = new OpenFile[MAX_NUM_OPENFILES];
 
+		// index 0 = console's reader, index 1 = console's writer
+		processList[0] = UserKernel.console.openForReading();
+		processList[1] = UserKernel.console.openForWriting();
+		
+		// set up next avail index for processList
+		nextAvailFileIndex = 2;	// because 0 and 1 are taken 
+		
+		/** commented out what I think might not work
 		// specify index 0 as reader and 1 as the writer
 		processList[0] = new OpenFile(UserKernel.fileSystem, "System Reader");
 		processList[1] = new OpenFile(UserKernel.fileSystem, "System Writer");
@@ -38,9 +46,7 @@ public class UserProcess {
 		// make the console input/output available
 		UserKernel.console.openForReading();
 		UserKernel.console.openForWriting();
-
-		// set up next avail index for processList
-		nextAvailFileIndex = 2;	// because 0 and 1 are taken 
+		*/
 	}
 
 	/**
@@ -404,6 +410,22 @@ public class UserProcess {
 		// this should not be called (unexpected error)
 		return -1;
 	}
+	
+	/**
+	 * Handle the read system call.
+	 */
+	private int handleRead(int i, int j, int k) {
+		// implement me
+		return 0;
+	}
+	
+	/**
+	 * Handle the write system call.
+	 */
+	private int handleWrite(int i, int j, int k) {
+		// implement me
+		return 0;
+	}
 
 	private static final int
 	syscallHalt = 0,
@@ -469,10 +491,10 @@ public class UserProcess {
 			return handleCreate(a0);
 		case syscallOpen:
 			return handleOpen(a0);
-		// case syscallRead:
-		// 	return handleRead(a0, a1, a2);
-		// case syscallWrite:
-		// 	return handleWrite(a0, a1, a2);
+		case syscallRead:
+		 	return handleRead(a0, a1, a2);
+		case syscallWrite:
+		 	return handleWrite(a0, a1, a2);
 		// case syscallClose:
 		//  return handleClose(a0);
 		// case syscallUnlink:
