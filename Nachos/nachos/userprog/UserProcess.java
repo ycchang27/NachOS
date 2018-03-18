@@ -29,24 +29,17 @@ public class UserProcess {
 			pageTable[i] = new TranslationEntry(i,i, true,false,false,false); 
 
 		// initialize the array of processes (OpenFiles)
-		processList = new OpenFile[MAX_NUM_OPENFILES];
+		processList = new Process[MAX_PROCESSES];
 
 		// index 0 = console's reader, index 1 = console's writer
-		processList[0] = UserKernel.console.openForReading();
-		processList[1] = UserKernel.console.openForWriting();
+		processList[0] = new Process(UserKernel.console.openForReading());
+		processList[1] = new Process(UserKernel.console.openForWriting());
 		
 		// set up next avail index for processList
-		nextAvailFileIndex = 2;	// because 0 and 1 are taken 
+		numProcesses = 2;	// because 0 and 1 are taken
 		
-		/** commented out what I think might not work
-		// specify index 0 as reader and 1 as the writer
-		processList[0] = new OpenFile(UserKernel.fileSystem, "System Reader");
-		processList[1] = new OpenFile(UserKernel.fileSystem, "System Writer");
-
-		// make the console input/output available
-		UserKernel.console.openForReading();
-		UserKernel.console.openForWriting();
-		*/
+		// set up number of Processes to fill
+		numProcessesToFill = 0;	// no "holes" in the array yet
 	}
 
 	/**
@@ -359,7 +352,7 @@ public class UserProcess {
 	 * Handle the halt() system call. 
 	 */
 	private int handleHalt() {
-
+		// implement me
 		Machine.halt();
 
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
@@ -372,17 +365,32 @@ public class UserProcess {
 	private int handleCreate(int vaddr) {
 		// find the file name and search for the file in the file system
 		String fileName = readVirtualMemoryString(vaddr, MAX_NUM_VIRTUAL_ARR_LENGTH);
+		
+		// check if the file name is valid
+		if(fileName == null) {
+			return -1;
+		}
+		
+		// check if the file exists
 		OpenFile file = UserKernel.fileSystem.open(fileName, false);
-
-		// do nothing if the file already exists
 		if(file != null) {
+			// do nothing
 			return -1;
 		}
 
-		// if not, create the file and return its index (fileDescriptor)
-		file = new OpenFile(UserKernel.fileSystem, fileName);
-		processList[nextAvailFileIndex] = file;
-		return nextAvailFileIndex ++;
+		// create the file and return its index (fileDescriptor)
+		int fileDescriptor = getNextEmptyProcess();
+		
+		// check if there is a spot
+		if(fileDescriptor != -1) {
+			// there is a spot to insert Process
+			file = new OpenFile(UserKernel.fileSystem, fileName);
+			processList[fileDescriptor] = new Process(file);
+			numProcesses ++;
+		}
+		
+		// return error or the new Process's index
+		return fileDescriptor;
 	}
 
 	/**
@@ -391,42 +399,131 @@ public class UserProcess {
 	private int handleOpen(int vaddr) {
 		// find the file name and search for the file in the file system
 		String fileName = readVirtualMemoryString(vaddr, MAX_NUM_VIRTUAL_ARR_LENGTH);
-		OpenFile file = UserKernel.fileSystem.open(fileName, false);
 
-		// do nothing if the file doesn't exist
+		// check if the file name is valid
+		if(fileName == null) {
+			return -1;
+		}
+
+		// check if the file exists
+		OpenFile file = UserKernel.fileSystem.open(fileName, false);
 		if(file == null) {
+			// do nothing
 			return -1;
 		}
 
 		// find the index of the OpenFile in the processList
 		// start at 2 because 0 and 1 are taken (console input and output)
-		for(int fileDescriptor = 2; fileDescriptor < MAX_NUM_OPENFILES; fileDescriptor ++) {
-			// if found, return the index (fileDescriptor)
-			if(processList[fileDescriptor].getName().equals(fileName)) {
-				return fileDescriptor;
-			}
+		int fileDescriptor = searchProcess(fileName);
+		
+		// unexpected error check
+		if(fileDescriptor == -1) {
+			// this should not be called (unexpected error)
+			Lib.assertNotReached("handleOpen(int vaddr) could not find the OpenFile in processList!");
 		}
-
-		// this should not be called (unexpected error)
-		return -1;
+		
+		return fileDescriptor;
 	}
 	
 	/**
 	 * Handle the read system call.
 	 */
-	private int handleRead(int i, int j, int k) {
-		// implement me
-		return 0;
+	private int handleRead(int fileDescriptor, int vaddr, int size) {
+		// checks validity of the fileDescriptor
+		if((fileDescriptor < 0 || fileDescriptor >= MAX_PROCESSES)
+				|| processList[fileDescriptor] == null) {
+			return -1;
+		}
+		
+		// read the buffer
+		byte[] buffer = new byte[size];
+		Process process = processList[fileDescriptor];
+		int newPosition = process.file.read(process.filePosition, buffer, 0, size);
+		
+		// check whether the read was successful
+		if(newPosition >= 0) {
+			int positionOffset = writeVirtualMemory(vaddr, buffer);
+			processList[fileDescriptor].filePosition += positionOffset;
+		}
+			
+		// return error or the position offset
+		return newPosition;
 	}
 	
 	/**
 	 * Handle the write system call.
 	 */
-	private int handleWrite(int i, int j, int k) {
-		// implement me
+	private int handleWrite(int fileDescriptor, int vaddr, int size) {
+		// checks validity of the fileDescriptor
+		if((fileDescriptor < 0 || fileDescriptor >= MAX_PROCESSES)
+				|| processList[fileDescriptor] == null) {
+			return -1;
+		}
+		
+		// read the buffer
+		byte[] buffer = new byte[size];
+		int byteCount = readVirtualMemory(vaddr, buffer);
+		
+		// write the buffer
+		Process process = processList[fileDescriptor];
+		int positionOffset = process.file.write(process.filePosition, buffer, 0, byteCount);
+		
+		// check whether the read was successful
+		if(positionOffset >= 0) {
+			processList[fileDescriptor].filePosition += positionOffset;
+		}
+		
+		// return error or the position offset
+		return positionOffset;
+	}
+	
+	/**
+	 * Handle the close system call.
+	 */
+	private int handleClose(int fileDescriptor) {
+		// checks validity of the fileDescriptor
+		if((fileDescriptor < 0 || fileDescriptor >= MAX_PROCESSES)
+				|| processList[fileDescriptor] == null) {
+			return -1;
+		}
+		
+		// close the process
+		processList[fileDescriptor].file.close();
+		
+		// remove the file from the file system if it's supposed to be removed
+		if(processList[fileDescriptor].removeMe == true) {
+			UserKernel.fileSystem.remove(processList[fileDescriptor].file.getName());
+		}
+		
+		// empty the spot
+		processList[fileDescriptor] = null;
+		
+		// close successful
 		return 0;
 	}
-
+	
+	/**
+	 * Handle the unlink system call.
+	 */
+	private int handleUnlink(int fileDescriptor) {
+		// checks validity of the fileDescriptor
+		if(fileDescriptor < 0 || fileDescriptor >= MAX_PROCESSES) {
+			return -1;
+		}
+		
+		// if the file doesn't exist in processList, then remove it in the file system
+		if(processList[fileDescriptor] == null) {
+			boolean success = UserKernel.fileSystem.remove(processList[fileDescriptor].file.getName());
+			return (success == true) ? 0 : -1;
+		}
+		
+		// "unlink" by setting the boolean to true, close syscall will remove it later
+		processList[fileDescriptor].removeMe = true;
+		
+		// unlink successful
+		return 0;
+	}
+	
 	private static final int
 	syscallHalt = 0,
 	syscallExit = 1,
@@ -443,11 +540,69 @@ public class UserProcess {
 	private static final int MAX_NUM_VIRTUAL_ARR_LENGTH = 256;
 
 	/** Array of "processes", which can be traversed by an index called "file descriptor" */
-	private OpenFile[] processList;
+	private Process[] processList;
 
+	/**
+	 * A class that represents a process. Its variables are declared as public
+	 * to make it easier to access in UserProcess class. Do not abuse!
+	 */
+	private class Process {
+		public OpenFile file;		// corresponding file
+		public int filePosition;	// corresponding file position
+		public boolean removeMe;	// determines whether this Process should be removed
+
+		// constructor
+		public Process(OpenFile file) {
+			this.file = file;
+			filePosition = 0;
+			removeMe = false;
+		}
+	}
+	
+	/**
+	 * Finds the next available index to insert for processList. If the list is full, return -1.
+	 */
+	private int getNextEmptyProcess() {
+		// return -1 if the array is full
+		if(numProcesses == MAX_PROCESSES) {
+			return -1;
+		}
+		// return current number of processes if there are no "holes" to fill
+		else if(numProcessesToFill == 0) {
+			return numProcesses;
+		}
+		// find the next empty spot
+		for(int fileDescriptor = 2; fileDescriptor < numProcesses; fileDescriptor ++) {
+			// if found, return the index (fileDescriptor)
+			if(processList[fileDescriptor] == null) {
+				return fileDescriptor;
+			}
+		}
+		
+		// unexpected error
+		Lib.assertNotReached("getNextEmptyProcess() got an unexpected issue!");
+		return -1;
+	}
+	
+	/**
+	 * Finds the Process's index that corresponds with file name. Returns -1, if not found.
+	 */
+	private int searchProcess(String fileName) {
+		// search in the array
+		for(int fileDescriptor = 2; fileDescriptor < numProcesses; fileDescriptor ++) {
+			// if found, return the index (fileDescriptor)
+			if(processList[fileDescriptor].file.getName().equals(fileName)) {
+				return fileDescriptor;
+			}
+		}
+		// search failed
+		return -1;
+	}
+	
 	/** processList variables*/
-	private static final int MAX_NUM_OPENFILES = 16;
-	private int nextAvailFileIndex;
+	private static final int MAX_PROCESSES = 16;
+	private int numProcesses;
+	private int numProcessesToFill;	// # of processes to fill the "holes" in the list like [x,null,y,z]
 
 	/**
 	 * Handle a syscall exception. Called by <tt>handleException()</tt>. The
@@ -495,10 +650,10 @@ public class UserProcess {
 		 	return handleRead(a0, a1, a2);
 		case syscallWrite:
 		 	return handleWrite(a0, a1, a2);
-		// case syscallClose:
-		//  return handleClose(a0);
-		// case syscallUnlink:
-		//  return handleUnlink(a0);
+		case syscallClose:
+			return handleClose(a0);
+		case syscallUnlink:
+			return handleUnlink(a0);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
