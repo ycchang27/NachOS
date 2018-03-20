@@ -3,6 +3,7 @@ package nachos.userprog;
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
+import java.util.LinkedList;
 
 /**
  * A kernel that can support multiple user processes.
@@ -19,6 +20,9 @@ public class UserKernel extends ThreadedKernel {
      * Initialize this kernel. Creates a synchronized console and sets the
      * processor's exception handler.
      */
+    
+    public int pagesAmount = Machine.processor().getNumPhysPages();
+    
     public void initialize(String[] args) {
 	super.initialize(args);
 
@@ -27,7 +31,13 @@ public class UserKernel extends ThreadedKernel {
 	Machine.processor().setExceptionHandler(new Runnable() {
 		public void run() { exceptionHandler(); }
 	    });
+	
+	for (int i = 0; i < pagesAmount; i++) {
+		pageTable.add(i);
+	}
+	
     }
+
 
     /**
      * Test the console device.
@@ -81,7 +91,25 @@ public class UserKernel extends ThreadedKernel {
 	int cause = Machine.processor().readRegister(Processor.regCause);
 	process.handleException(cause);
     }
-
+    
+    public static int retrievePage() {
+    	int pageNumber = -1;
+    	Lib.assertTrue(pageNumber < 0);
+    		Machine.interrupt().disable();
+    		if (!pageTable.isEmpty())
+    			pageNumber = pageTable.removeFirst();
+    		Machine.interrupt().enable();
+    		return pageNumber;
+    }
+    
+    public static void addAPage(int pageNum) {
+    		Lib.assertTrue(pageNum >= 0 && pageNum < Machine.processor().getNumPhysPages());
+    		Machine.interrupt().disable();
+    		pageTable.add(pageNum);
+    		Machine.interrupt().enable();
+    	
+    }
+    
     /**
      * Start running user programs, by creating a process and running a shell
      * program in it. The name of the shell program it must run is returned by
@@ -109,6 +137,8 @@ public class UserKernel extends ThreadedKernel {
 
     /** Globally accessible reference to the synchronized console. */
     public static SynchConsole console;
+    
+    private static LinkedList<Integer> pageTable = new LinkedList<Integer>();
 
     // dummy variables to make javac smarter
     private static Coff dummy1 = null;

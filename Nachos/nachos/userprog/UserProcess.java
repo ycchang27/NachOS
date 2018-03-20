@@ -186,13 +186,33 @@ public class UserProcess {
 	public int writeVirtualMemory(int vaddr, byte[] data, int offset,
 			int length) {
 		Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
-
+		
 		byte[] memory = Machine.processor().getMemory();
 
 		// for now, just assume that virtual addresses equal physical addresses
 		if (vaddr < 0 || vaddr >= memory.length)
 			return 0;
 
+		int virtualPageNumber = Machine.processor().pageFromAddress(vaddr);
+		int offsetForAddress = Machine.processor().offsetFromAddress(vaddr);
+		int numPages = Machine.processor().getNumPhysPages();
+		
+		
+		TranslationEntry e = pageTable[virtualPageNumber];
+		e.dirty = true;
+		e.used = true;
+		
+		int physicalPageNum = e.ppn;
+		int physicalAddress = (physicalPageNum * pageSize) + offsetForAddress;
+		
+		if (e.readOnly == true || // if 
+				physicalPageNum < 0 || // invalid page number 
+				physicalPageNum >= numPages) // if physical page number amount exceeds what there is
+		{
+			
+			return 0;
+		}
+		
 		int amount = Math.min(length, memory.length-vaddr);
 		System.arraycopy(data, offset, memory, vaddr, amount);
 
@@ -295,7 +315,8 @@ public class UserProcess {
 	 * @return	<tt>true</tt> if the sections were successfully loaded.
 	 */
 	protected boolean loadSections() {
-		if (numPages > Machine.processor().getNumPhysPages()) {
+		int machineNumOfPages = Machine.processor().getNumPhysPages();
+		if (numPages > machineNumOfPages) {
 			coff.close();
 			Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
@@ -312,8 +333,16 @@ public class UserProcess {
 				int vpn = section.getFirstVPN()+i;
 
 				// for now, just assume virtual addresses=physical addresses
-				section.loadPage(i, vpn);
+				
+				// accessing pageTable with virtual page number and saving that value into entry variable 
+				TranslationEntry entry = pageTable[vpn];
+				
+				// setting boolean value 
+				entry.readOnly = section.isReadOnly();
+				
+				section.loadPage(i, entry.ppn);
 			}
+			
 		}
 
 		return true;
@@ -323,6 +352,13 @@ public class UserProcess {
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
+		int i = 0;
+		while (i < numPages) {
+			UserKernel.addAPage(pageTable[i].ppn);
+			pageTable[i].valid = false;
+			i++;
+		}
+		
 	}    
 
 	/**
@@ -703,7 +739,7 @@ public class UserProcess {
 
 	private int initialPC, initialSP;
 	private int argc, argv;
-
+	
 	private static final int pageSize = Processor.pageSize;
 	private static final char dbgProcess = 'a';
 }
