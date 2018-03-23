@@ -370,6 +370,7 @@ public class UserProcess {
 		if(fileName == null) {
 			return -1;
 		}
+		System.out.println("handleCreate is called here"+fileName);
 		
 		// check if the file exists
 		OpenFile file = UserKernel.fileSystem.open(fileName, false);
@@ -377,7 +378,6 @@ public class UserProcess {
 			// do nothing
 			return -1;
 		}
-
 		// create the file and return its index (fileDescriptor)
 		int fileDescriptor = getNextEmptyProcess();
 		
@@ -385,10 +385,10 @@ public class UserProcess {
 		if(fileDescriptor != -1) {
 			// there is a spot to insert Process
 			file = new OpenFile(UserKernel.fileSystem, fileName);
+			UserKernel.fileSystem.open(fileName, true);
 			processList[fileDescriptor] = new Process(file);
 			numProcesses ++;
 		}
-		
 		// return error or the new Process's index
 		return fileDescriptor;
 	}
@@ -404,14 +404,16 @@ public class UserProcess {
 		if(fileName == null) {
 			return -1;
 		}
-
+		System.out.println("handleOpen is called here"+fileName);
+		
 		// check if the file exists
 		OpenFile file = UserKernel.fileSystem.open(fileName, false);
 		if(file == null) {
+			System.out.println("(handleOpen)file not found");
 			// do nothing
 			return -1;
 		}
-
+		System.out.println("(handleOpen)file found");
 		// find the index of the OpenFile in the processList
 		// start at 2 because 0 and 1 are taken (console input and output)
 		int fileDescriptor = searchProcess(fileName);
@@ -589,8 +591,9 @@ public class UserProcess {
 	 */
 	private int searchProcess(String fileName) {
 		// search in the array
-		for(int fileDescriptor = 2; fileDescriptor < numProcesses; fileDescriptor ++) {
+		for(int fileDescriptor = 0; fileDescriptor < numProcesses && processList[fileDescriptor] != null; fileDescriptor ++) {
 			// if found, return the index (fileDescriptor)
+			System.out.println(fileDescriptor+" filename:"+processList[fileDescriptor].file.getName());
 			if(processList[fileDescriptor].file.getName().equals(fileName)) {
 				return fileDescriptor;
 			}
