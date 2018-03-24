@@ -427,6 +427,94 @@ public class UserProcess {
 		fileList[fileDescriptor] = file;
 		return fileDescriptor;
 	}
+	
+	/**
+	 * Attempt to read up to size bytes into buffer from the file or stream
+	 * referred to by fileDescriptor.
+	 *
+	 * On success, the number of bytes read is returned. If the file descriptor
+	 * refers to a file on disk, the file position is advanced by this number.
+	 *
+	 * It is not necessarily an error if this number is smaller than the number of
+	 * bytes requested. If the file descriptor refers to a file on disk, this
+	 * indicates that the end of the file has been reached. If the file descriptor
+	 * refers to a stream, this indicates that the fewer bytes are actually
+	 * available right now than were requested, but more bytes may become available
+	 * in the future. Note that read() never waits for a stream to have more data;
+	 * it always returns as much as possible immediately.
+	 *
+	 * On error, -1 is returned, and the new file position is undefined. This can
+	 * happen if fileDescriptor is invalid, if part of the buffer is read-only or
+	 * invalid, or if a network stream has been terminated by the remote host and
+	 * no more data is available.
+	 * 
+	 * @param fileDescriptor
+	 * @param vaddr
+	 * @param size
+	 * @return On success, the number of bytes read is returned. On error, -1 is 
+	 * returned, and the new file position is undefined.
+	 * 
+	 */
+	private int handleRead(int fileDescriptor, int vaddr, int size) {
+		// Return -1 if the input is invalid
+		if(size < 0 || (fileDescriptor >= MAX_FILES || fileDescriptor < 0)
+				|| fileList[fileDescriptor] == null) {
+			return -1;
+		}
+		
+		// Read up to size bytes and save the number of bytes read
+		byte[] readBuffer = new byte[size];
+		int bytesRead = fileList[fileDescriptor].read(readBuffer, 0, size);
+		
+		// Return -1 if failed to read
+		if(bytesRead == -1) {
+			return -1;
+		}
+		
+		// Write the buffer into the virtual memory and return bytes transferred
+		int bytesTransferred = writeVirtualMemory(vaddr, readBuffer, 0, bytesRead);
+		return bytesTransferred;
+	}
+	
+	/**
+	 * Attempt to write up to count bytes from buffer to the file or stream
+	 * referred to by fileDescriptor. write() can return before the bytes are
+	 * actually flushed to the file or stream. A write to a stream can block,
+	 * however, if kernel queues are temporarily full.
+	 *
+	 * On success, the number of bytes written is returned (zero indicates nothing
+	 * was written), and the file position is advanced by this number. It IS an
+	 * error if this number is smaller than the number of bytes requested. For
+	 * disk files, this indicates that the disk is full. For streams, this
+	 * indicates the stream was terminated by the remote host before all the data
+	 * was transferred.
+	 *
+	 * On error, -1 is returned, and the new file position is undefined. This can
+	 * happen if fileDescriptor is invalid, if part of the buffer is invalid, or
+	 * if a network stream has already been terminated by the remote host.
+	 * 
+	 * @param fileDescriptor
+	 * @param vaddr
+	 * @param size
+	 * @return On success, the number of bytes written is returned (zero indicates nothing
+	 * was written), and the file position is advanced by this number. On error, -1 is 
+	 * returned, and the new file position is undefined.
+	 */
+	private int handleWrite(int fileDescriptor, int vaddr, int size) {
+		// Return -1 if the input is invalid
+		if(size < 0 || (fileDescriptor >= MAX_FILES || fileDescriptor < 0)
+				|| fileList[fileDescriptor] == null) {
+			return -1;
+		}
+		
+		// Count number of buffers to write
+		byte[] writeBuffer = new byte[size];
+		int bytesToWrite = readVirtualMemory(vaddr, writeBuffer, 0, size);
+		
+		// Write the file and return number of bytes written
+		int bytesWritten =  fileList[fileDescriptor].write(writeBuffer, 0, bytesToWrite);
+		return bytesWritten;
+	}
 
 	private static final int
 	syscallHalt = 0,
@@ -476,10 +564,13 @@ public class UserProcess {
 			return handleCreate(a0);
 		case syscallOpen:
 			return handleOpen(a0);
-
+		case syscallRead:
+			return handleRead(a0,a1,a2);
+		case syscallWrite:
+			return handleWrite(a0,a1,a2);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
-			Lib.assertNotReached("Unknown system call!");
+			Lib.assertNotReached("Unknown system call! " + syscall);
 		}
 		return 0;
 	}
