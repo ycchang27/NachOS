@@ -347,12 +347,21 @@ public class UserProcess {
 	}
 
 	/**
-	 * Handle the halt() system call. 
+	 * Halt the Nachos machine by calling Machine.halt(). Only the root process
+	 * (the first process, executed by UserKernel.run()) should be allowed to
+	 * execute this syscall. Any other process should ignore the syscall and return
+	 * immediately.
+	 * 
+	 * @return -1 if an error occurred
 	 */
 	private int handleHalt() {
-
+		// Return -1 if this process isn't the root
+		if(processID != ROOTPROCESS) {
+			return -1;
+		}
+		
+		// Halt the machine
 		Machine.halt();
-
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
 		return 0;
 	}
@@ -683,7 +692,7 @@ public class UserProcess {
 	}
 
 	
-	/** ArrayList of files that UserProcess manipulates */
+	/** Array of files that UserProcess manipulates */
 	private OpenFile[] fileList;
 	private final int MAX_FILES = 16;
 	private final int MAX_STRLENGTH = 256;
@@ -710,9 +719,10 @@ public class UserProcess {
 		return -1;
 	}
 	
-	/** Index "enum" */
+	/** "enum" */
 	private final int STDINPUT = 0;
 	private final int STDOUTPUT = 1;
+	private final int ROOTPROCESS = 0;
 	
 	/** Process ID */
 	private int processID;
