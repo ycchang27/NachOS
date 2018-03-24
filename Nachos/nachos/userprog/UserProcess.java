@@ -499,6 +499,7 @@ public class UserProcess {
 	 * @return On success, the number of bytes written is returned (zero indicates nothing
 	 * was written), and the file position is advanced by this number. On error, -1 is 
 	 * returned, and the new file position is undefined.
+	 * 
 	 */
 	private int handleWrite(int fileDescriptor, int vaddr, int size) {
 		// Return -1 if the input is invalid
@@ -514,6 +515,78 @@ public class UserProcess {
 		// Write the file and return number of bytes written
 		int bytesWritten =  fileList[fileDescriptor].write(writeBuffer, 0, bytesToWrite);
 		return bytesWritten;
+	}
+	
+	/**
+	 * Close a file descriptor, so that it no longer refers to any file or stream
+	 * and may be reused.
+	 *
+	 * If the file descriptor refers to a file, all data written to it by write()
+	 * will be flushed to disk before close() returns.
+	 * If the file descriptor refers to a stream, all data written to it by write()
+	 * will eventually be flushed (unless the stream is terminated remotely), but
+	 * not necessarily before close() returns.
+	 *
+	 * The resources associated with the file descriptor are released. If the
+	 * descriptor is the last reference to a disk file which has been removed using
+	 * unlink, the file is deleted (this detail is handled by the file system
+	 * implementation).
+	 *
+	 * Returns 0 on success, or -1 if an error occurred.
+	 * 
+	 * @param fileDescriptor
+	 * @return 0 on success, or -1 if an error occurred.
+	 * 
+	 */
+	private int handleClose(int fileDescriptor) {
+		// Return -1 if the input is invalid
+		if((fileDescriptor >= MAX_FILES || fileDescriptor < 0)
+				|| fileList[fileDescriptor] == null) {
+			return -1;
+		}
+		
+		// Close and remove the element from the list
+		fileList[fileDescriptor].close();
+		fileList[fileDescriptor] = null;
+		return 0;
+	}
+	
+	/**
+	 * Delete a file from the file system. If no processes have the file open, the
+	 * file is deleted immediately and the space it was using is made available for
+	 * reuse.
+	 *
+	 * If any processes still have the file open, the file will remain in existence
+	 * until the last file descriptor referring to it is closed. However, creat()
+	 * and open() will not be able to return new file descriptors for the file
+	 * until it is deleted.
+	 *
+	 * Returns 0 on success, or -1 if an error occurred.
+	 * 
+	 * @param vaddr
+	 * @return 0 on success, or -1 if an error occurred.
+	 * 
+	 */
+	private int handleUnlink(int vaddr) {
+		// Extract the file name
+		String fileName = readVirtualMemoryString(vaddr, MAX_STRLENGTH);
+
+		// Return -1 if the file name is invalid
+		if(fileName == null) {
+			return -1;
+		}
+		
+		// Search for index
+		int fileDescriptor = searchFile(fileName);
+		
+		// Return -1 if the file still exists in fileList
+		if(fileDescriptor != -1) {
+			return -1;
+		}
+		
+		// Remove the file from the UserKernel's fileSystem and return the result
+		boolean removeSuccess = UserKernel.fileSystem.remove(fileName);
+		return (removeSuccess == true) ? 0 : -1;
 	}
 
 	private static final int
@@ -568,6 +641,10 @@ public class UserProcess {
 			return handleRead(a0,a1,a2);
 		case syscallWrite:
 			return handleWrite(a0,a1,a2);
+		case syscallClose:
+			return handleClose(a0);
+		case syscallUnlink:
+			return handleUnlink(a0);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call! " + syscall);
@@ -617,6 +694,17 @@ public class UserProcess {
 		for(int i = 2; i < MAX_FILES; i++) {
 			if(fileList[i] == null) {
 				return i;
+			}
+		}
+		return -1;
+	}
+	
+	/** file descriptor search function for fileList */
+	private int searchFile(String fileName) {
+		for(int fileDescriptor = 0; fileDescriptor < MAX_FILES; fileDescriptor++) {
+			if(fileList[fileDescriptor] != null 
+					&& fileList[fileDescriptor].getName().equals(fileName)) {
+				return fileDescriptor;
 			}
 		}
 		return -1;
