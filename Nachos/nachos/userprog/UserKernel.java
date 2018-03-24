@@ -133,6 +133,9 @@ public class UserKernel extends ThreadedKernel {
 	public void terminate() {
 		super.terminate();
 	}
+	
+	/** Number of processes */
+	public static int numProcess = 0; 
 
 	/** Globally accessible reference to the synchronized console. */
 	public static SynchConsole console;
