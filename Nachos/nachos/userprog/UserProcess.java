@@ -5,6 +5,7 @@ import nachos.threads.*;
 import nachos.userprog.*;
 
 import java.io.EOFException;
+import java.util.HashMap;
 import java.util.LinkedList;
 
 /**
@@ -41,6 +42,9 @@ public class UserProcess {
 
 		// set up number of Processes to fill
 		numProcessesToFill = 0; // no "holes" in the array yet
+		processID = nextprocessID++;
+		
+
 	}
 
 	/**
@@ -569,7 +573,118 @@ public class UserProcess {
 		// unlink successful
 		return 0;
 	}
+	
+	/**
+	 * Handle the exit system call.
+	 */
+	private int handleExit(int status)
+	{
+		lock.acquire();
+		
+		if (process != null)
+			process.sigExit(processID, status);
+		
+		for (ChildProcess cp: children.values())
+		{
+			if (cp.childProcess != null)
+				cp.childProcess.orphan();
+		}
+		
+		children = null;
+		for (int i = 2; i< MAX_PROCESSES; i++)
+		{
+			if (validDescriptor(i))
+				handleClose(i);
+		}
+		
+		processList[0].file.close();
+		processList[1].file.close();
+		
+		unloadSections();
+		
+		exit = true;
+		
+		waitingThreads.wakeAll();
+		lock.release();
+		if(--currentProcesses == 0)
+		{
+			Kernel.kernel.terminate();
+		}
+		KThread.finish();
+		
+		return 0;
+	}
+	
+	private boolean validDescriptor(int fd)
+	{
+		boolean valid;
+		
+		if (fd < 0)
+			return false;
+		
+		
+		if (fd >= processList.length)
+			return false;
+		
+		valid = processList[fd].currentlyUsing;
+		return valid;
+		
+	}
+	protected  void sigExit(int childProcessID, Integer status)
+	{
+		ChildProcess child = children.get(childProcessID);
+		if(child == null)
+			return;
+		
+		child.childProcess = null;
+		
+		child.returnVal = status;
+	
+	}
+	
+	protected void orphan()
+	{
+		process = null;
+	}
 
+
+	
+	private int handleJoin(int processID, int status)
+	{
+		if (validAddress(status)!= true)
+			return -1;
+		
+		ChildProcess child = children.get(processID);
+		
+		if(child == null)
+			return -1;
+		
+		if (child.childProcess != null)
+			child.childProcess.join();
+		
+		if (child.returnVal == null)
+			return 0;
+		
+		writeVirtualMemory(status, Lib.bytesFromInt(child.returnVal));
+		return 1;
+	}
+	
+	private void join()
+	{
+	lock.acquire();	
+	while (exit != true)
+			waitingThreads.sleep();
+	
+	lock.release();
+	}
+	protected boolean validAddress(int adr)
+	{
+	int tmp = Processor.pageFromAddress(adr);
+	
+	return (tmp < numPages && tmp >= 0);
+	
+	}
+	
 	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2, syscallJoin = 3, syscallCreate = 4,
 			syscallOpen = 5, syscallRead = 6, syscallWrite = 7, syscallClose = 8, syscallUnlink = 9;
 
@@ -587,6 +702,7 @@ public class UserProcess {
 	 * make it easier to access in UserProcess class. Do not abuse!
 	 */
 	private class Process {
+		private boolean currentlyUsing = false;
 		public OpenFile file; // corresponding file
 		public int filePosition; // corresponding file position
 		public boolean removeMe; // determines whether this Process should be removed
@@ -717,12 +833,12 @@ public class UserProcess {
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
-		// case syscallExit:
-		// return handleExit(a0);
+		case syscallExit:
+			return handleExit(a0);
 		// case syscallExec:
 		// return handleExec(a0, a1, a2);
-		// case syscallJoin:
-		// return handleJoin(a0, a1);
+		 case syscallJoin:
+			 return handleJoin(a0, a1);
 		case syscallCreate:
 			return handleCreate(a0);
 		case syscallOpen:
@@ -767,6 +883,22 @@ public class UserProcess {
 			Lib.assertNotReached("Unexpected exception");
 		}
 	}
+	
+	
+	private static class ChildProcess 
+	{
+		public UserProcess childProcess;
+		public Integer returnVal;
+		
+		ChildProcess(UserProcess childProcess)
+		{
+			this.childProcess = childProcess;
+			returnVal = null;
+			
+		}
+	}
+	
+	
 
 	/** The program being run by this process. */
 	protected Coff coff;
@@ -784,4 +916,25 @@ public class UserProcess {
 
 	private static final int pageSize = Processor.pageSize;
 	private static final char dbgProcess = 'a';
+	
+	
+	//needed for task 3 implementaiton
+	
+	//exit stuff
+	boolean exit = false;
+	
+	//needed to act as the parent
+	protected UserProcess process;
+	//needed to told the process ID for the parent
+	protected int processID;
+	//update the processID
+	private static int nextprocessID = 0;
+	//store children pocesses
+	private HashMap<Integer, ChildProcess> children = new HashMap<Integer, ChildProcess> ();
+	//lock needed to handle the joining and exit
+	private Lock lock = new Lock();
+	//needed for the waiting threads in join
+	private Condition waitingThreads = new Condition(lock);
+	//need to keep track of the processes currently in process
+	protected int currentProcesses;
 }

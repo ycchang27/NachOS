@@ -8,3 +8,4 @@
 /UserKernel.class
 /UserProcess.class
 /UserProcess$Process.class
+/UserProcess$ChildProcess.class
