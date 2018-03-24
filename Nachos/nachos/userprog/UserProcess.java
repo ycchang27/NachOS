@@ -393,6 +393,40 @@ public class UserProcess {
 		return fileDescriptor;
 	}
 
+	/**
+	 * Attempt to open the named file and return a file descriptor.
+	 *
+	 * Note that open() can only be used to open files on disk; open() will never
+	 * return a file descriptor referring to a stream.
+	 *
+	 * Returns the new file descriptor, or -1 if an error occurred.
+	 * 
+	 * @param vaddr
+	 * @return the new file descriptor, or -1 if an error occurred.
+	 * 
+	 */
+	private int handleOpen(int vaddr) {
+		// Extract the file name
+		String fileName = readVirtualMemoryString(vaddr, MAX_STRLENGTH);
+
+		// Return -1 if the file name is invalid or the list is full
+		int fileDescriptor = getAvailIndex();
+		if(fileName == null || fileDescriptor == -1) {
+			return -1;
+		}
+
+		// Try creating the OpenFile
+		OpenFile file = UserKernel.fileSystem.open(fileName, false);
+
+		// Return -1 if the file creation failed
+		if(file == null) {
+			return -1;
+		}
+
+		// Insert the file in the fileList and return its file descriptor
+		fileList[fileDescriptor] = file;
+		return fileDescriptor;
+	}
 
 	private static final int
 	syscallHalt = 0,
@@ -440,6 +474,8 @@ public class UserProcess {
 			return handleHalt();
 		case syscallCreate:
 			return handleCreate(a0);
+		case syscallOpen:
+			return handleOpen(a0);
 
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
