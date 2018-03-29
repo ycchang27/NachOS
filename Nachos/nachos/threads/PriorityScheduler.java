@@ -126,6 +126,9 @@ public class PriorityScheduler extends Scheduler {
 	 * A <tt>ThreadQueue</tt> that sorts threads by priority.
 	 */
 	protected class PriorityQueue extends ThreadQueue {
+		PriorityQueue(){
+			this.transferPriority = true;
+		}
 		PriorityQueue(boolean transferPriority) {
 			this.transferPriority = transferPriority;
 
@@ -215,6 +218,7 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.KThread#schedulingState
 	 */
 	protected class ThreadState {
+		ThreadState(){}
 		/**
 		 * Allocate a new <tt>ThreadState</tt> object and associate it with the
 		 * specified thread.
@@ -325,6 +329,7 @@ public class PriorityScheduler extends Scheduler {
 			if (currently_acquired == null) currently_acquired = new HashSet<PriorityQueue>();
 			if (currently_waiting != null)	// stop waiting, since thread has acquired it
 			{
+				// currently_waiting.thread_states.remove(this);
 				if (currently_waiting == waitQueue)
 				{
 					currently_waiting.thread_states.remove(this);
@@ -408,5 +413,64 @@ public class PriorityScheduler extends Scheduler {
 
 	}
 	
-	public static void selfTest(){return;}
+//	public static void selfTest(){return;}
+	public static void selfTest() {
+		System.out.println("---------PriorityScheduler test---------------------");
+		PriorityScheduler s = new PriorityScheduler();
+		ThreadQueue queue = s.newThreadQueue(true);
+		ThreadQueue queue2 = s.newThreadQueue(true);
+		ThreadQueue queue3 = s.newThreadQueue(true);
+		
+		KThread thread1 = new KThread();
+		KThread thread2 = new KThread();
+		KThread thread3 = new KThread();
+		KThread thread4 = new KThread();
+		KThread thread5 = new KThread();
+		thread1.setName("thread1");
+		thread2.setName("thread2");
+		thread3.setName("thread3");
+		thread4.setName("thread4");
+		thread5.setName("thread5");
+
+		
+		boolean intStatus = Machine.interrupt().disable();
+		
+		queue3.acquire(thread1);
+		queue.acquire(thread1);
+		queue.waitForAccess(thread2);
+		queue2.acquire(thread4);
+		queue2.waitForAccess(thread1);
+		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+		
+		s.getThreadState(thread2).setPriority(3);
+		
+		System.out.println("After setting thread2's EP=3:");
+		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+		
+		queue.waitForAccess(thread3);
+		s.getThreadState(thread3).setPriority(5);
+		
+		System.out.println("After adding thread3 with EP=5:");
+		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
+		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+		
+		s.getThreadState(thread3).setPriority(2);
+		
+		System.out.println("After setting thread3 EP=2:");
+		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
+		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+		
+		System.out.println("Thread1 acquires queue and queue3");
+		
+		Machine.interrupt().restore(intStatus);
+		System.out.println("--------End PriorityScheduler test------------------");
+	}
 }

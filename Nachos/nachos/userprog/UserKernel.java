@@ -34,6 +34,7 @@ public class UserKernel extends ThreadedKernel {
 			}
 		});
 
+		pageLock = new Lock();
 		for (int i = 0; i < pagesAmount; i++) {
 			pageTable.add(i);
 		}
@@ -46,17 +47,17 @@ public class UserKernel extends ThreadedKernel {
 	public void selfTest() {
 		super.selfTest();
 
-//		System.out.println("Testing the console device. Typed characters");
-//		System.out.println("will be echoed until q is typed.");
-//
-//		char c;
-//
-//		do {
-//			c = (char) console.readByte(true);
-//			console.writeByte(c);
-//		} while (c != 'q');
-//
-//		System.out.println("");
+		System.out.println("Testing the console device. Typed characters");
+		System.out.println("will be echoed until q is typed.");
+
+		char c;
+
+		do {
+			c = (char) console.readByte(true);
+			console.writeByte(c);
+		} while (c != 'q');
+
+		System.out.println("");
 	}
 
 	/**
@@ -127,8 +128,20 @@ public class UserKernel extends ThreadedKernel {
 		String[] arguments = {/* insert arguments here */};
 		Lib.assertTrue(process.execute(shellProgram, arguments));
 
+		
 		KThread.currentThread().finish();
 	}
+	
+	public static boolean deletePage(int ppn) {
+        boolean value = false;
+
+        pageLock.acquire();
+        pageTable.add(new Integer(ppn));
+        value = true;
+        pageLock.release();
+
+        return value;
+    }
 
 	/**
 	 * Terminate this kernel. Never returns.
@@ -144,6 +157,8 @@ public class UserKernel extends ThreadedKernel {
 	public static SynchConsole console;
 
 	private static LinkedList<Integer> pageTable = new LinkedList<Integer>();
+	
+	private static Lock pageLock;
 
 	// dummy variables to make javac smarter
 	private static Coff dummy1 = null;
