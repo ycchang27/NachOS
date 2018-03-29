@@ -48,3 +48,5 @@
 /KThread$4.class
 /Alarm$1RunAlarm.class
 /Communicator$ComTest.class
+/LotteryScheduler$LotteryQueue.class
+/LotteryScheduler$ThreadState.class

@@ -207,7 +207,8 @@ public class LotteryScheduler extends PriorityScheduler {
 			System.out.println();
 		}
     }
-    
+
+    /*
     public static void selfTest() {
 		System.out.println("---------LotteryScheduler test 1---------------------");
 		LotteryScheduler s = new LotteryScheduler();
@@ -346,4 +347,5 @@ public class LotteryScheduler extends PriorityScheduler {
 		System.out.println("\n--------End LotteryScheduler test 2------------------");
 		Machine.interrupt().restore(intStatus);
 	}
+	*/
 }
