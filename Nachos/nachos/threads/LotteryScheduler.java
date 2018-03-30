@@ -1,15 +1,9 @@
 package nachos.threads;
 
 import nachos.machine.*;
-import nachos.threads.PriorityScheduler.PriorityQueue;
-import nachos.threads.PriorityScheduler.ThreadState;
 
 import java.util.Random;
-import java.util.TreeSet;
 import java.util.HashSet;
-import java.util.Iterator;
-
-import com.sun.scenario.effect.impl.sw.sse.SSEBlend_ADDPeer;
 
 /**
  * A scheduler that chooses threads using a lottery.
@@ -120,13 +114,15 @@ public class LotteryScheduler extends PriorityScheduler {
 		}
 
 		public void waitForAccess(LotteryQueue waitQueue) {
+			reset();
 			if (acquired.remove(waitQueue)){
 				waitQueue.owner = null;
 			}
 			waiting = waitQueue;
 			waiting.waitQueue.add(this);
-			if (waiting.owner != null) waiting.owner.calcEffective(false);
-			else waiting.update();
+			calcEffective(false);
+//			if (waiting.owner != null) waiting.owner.calcEffective(false);
+//			else waiting.update();
 		}
 
 		public void acquire(LotteryQueue acquiredQueue) {
@@ -319,7 +315,7 @@ public class LotteryScheduler extends PriorityScheduler {
 //		
 //		queue.print();
 //		int tally[] = new int[4];
-//		for (int i = 0; i < 1000; ++i)
+//		for (int i = 0; i < 10000; ++i)
 //		{
 //			KThread n = queue.nextThread();
 ////			System.out.println("next returns " + n.getName());
@@ -372,12 +368,12 @@ public class LotteryScheduler extends PriorityScheduler {
 //		queue.print();
 //		
 //		queue.waitForAccess(thread1);
-//		System.out.println("thread1 goes back to queue, retains 100 tickets");
+//		System.out.println("thread1 goes back to queue, returns 99 tickets");
 //		System.out.println("thread1 EP = " + s.getThreadState(thread1).getEffectivePriority());
 //		queue.print();
 //		
 //		queue.acquire(thread2);
-//		System.out.println("thread2 acquired queue, regains 99 tickets");
+//		System.out.println("thread2 acquired queue, remains at 100 tickets");
 //		System.out.println("thread2 EP = " + s.getThreadState(thread2).getEffectivePriority());
 //		queue.print();
 //		
@@ -392,7 +388,7 @@ public class LotteryScheduler extends PriorityScheduler {
 //		queue.print();
 //		
 //		queue.waitForAccess(thread2);
-//		System.out.println("thread2 goes back to queue, retains 149 tickets");
+//		System.out.println("thread2 goes back to queue, returns 49 tickets");
 //		System.out.println("thread2 EP = " + s.getThreadState(thread2).getEffectivePriority());
 //		queue.print();
 //		

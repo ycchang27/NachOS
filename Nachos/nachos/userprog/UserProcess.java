@@ -965,6 +965,7 @@ public class UserProcess {
 			break;				       
 
 		default:
+			System.out.println("Unexpected exception: " + Processor.exceptionNames[cause]);
 			Lib.debug(dbgProcess, "Unexpected exception: " +
 					Processor.exceptionNames[cause]);
 			Lib.assertNotReached("Unexpected exception");
