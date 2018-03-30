@@ -9,6 +9,8 @@ import java.util.TreeSet;
 import java.util.HashSet;
 import java.util.Iterator;
 
+import com.sun.scenario.effect.impl.sw.sse.SSEBlend_ADDPeer;
+
 /**
  * A scheduler that chooses threads using a lottery.
  *
@@ -44,6 +46,7 @@ public class LotteryScheduler extends PriorityScheduler {
 		public int ePriority = 0;
 		public int donated = 0;
     	public int base = 0;
+    	public ThreadState borrower;
     	public HashSet<LotteryQueue> acquired;
     	public LotteryQueue waiting; 
     	
@@ -53,49 +56,50 @@ public class LotteryScheduler extends PriorityScheduler {
 			acquired = new HashSet<LotteryQueue>();
 		}
 		
-		public void calcEffective(){
+		public void calcEffective(boolean dirty){
 //			System.out.println(thread.getName() + " calculates effective");
-			reset();
+			if (dirty) reset();
 			for (LotteryQueue Q : acquired){
 				Q.update();
 			}
 			if (waiting != null){
-				if (waiting.owner != null) waiting.owner.calcEffective();
+				if (waiting.owner != null) waiting.owner.calcEffective(false);
 				else waiting.update();
 			}
 		}
 		
 		public void donateTo(ThreadState T){
+			revert();
 			if (this.ePriority > 1)
 			{
 //				System.out.println(thread.getName() + " donates " + (this.ePriority-1) + " to " + T.thread.getName());
 				donated = this.ePriority - 1;
 				this.ePriority = 1;
 				T.ePriority += donated;
+				borrower = T;
 			}
 		}
 		
-		public void revert(ThreadState T){
-			if (donated != 0){
-//				System.out.println(T.thread.getName() + " returns " + donated);
-				T.ePriority -= donated;
-				if (T.ePriority < 1){
-					T.revert(T.waiting.owner);
-				}
+		public void revert(){
+			if (borrower != null){
+//				System.out.println(thread.getName() + " reclaims " + donated + " from " + borrower.thread.getName());
+				borrower.revert();
+				borrower.ePriority -= donated;
 				this.ePriority += donated;
 				donated = 0;
+				borrower = null;
 			}
 		}
 		
 		public void reset(){
-			if (donated != 0){
-				revert(waiting.owner);
+			if (donated != 0 || borrower != null){
+				revert();
 			}
 			if (this.ePriority != this.priority)
 			{
 				for (LotteryQueue Q : acquired){
 					for (ThreadState T : Q.waitQueue){
-						T.revert(this);
+						T.revert();
 					}
 				}
 			}
@@ -111,7 +115,7 @@ public class LotteryScheduler extends PriorityScheduler {
 			{
 				reset();
 				this.priority = this.ePriority = priority;
-				calcEffective();
+				calcEffective(false);
 			}
 		}
 
@@ -121,24 +125,25 @@ public class LotteryScheduler extends PriorityScheduler {
 			}
 			waiting = waitQueue;
 			waiting.waitQueue.add(this);
-			if (waiting.owner != null) waiting.owner.calcEffective();
+			if (waiting.owner != null) waiting.owner.calcEffective(false);
 			else waiting.update();
 		}
 
 		public void acquire(LotteryQueue acquiredQueue) {
+			reset();
 			if (waiting == acquiredQueue){
 				waiting.waitQueue.remove(this);
 				waiting = null;
 			}
-			acquired.add(acquiredQueue);
-			if (acquiredQueue.owner != null)
+			if (acquiredQueue.owner != null && acquiredQueue.owner != this)
 			{
 				ThreadState T = acquiredQueue.owner;
+				T.reset();
 				T.acquired.remove(acquiredQueue);
-				T.calcEffective();
+				T.calcEffective(true);
 			}
 			acquiredQueue.owner = this;
-			calcEffective();
+			calcEffective(!acquired.add(acquiredQueue));
 		}
 	}
 
@@ -207,145 +212,201 @@ public class LotteryScheduler extends PriorityScheduler {
 			System.out.println();
 		}
     }
-
-    /*
-    public static void selfTest() {
-		System.out.println("---------LotteryScheduler test 1---------------------");
-		LotteryScheduler s = new LotteryScheduler();
-		ThreadQueue queue = s.newThreadQueue(true);
-		ThreadQueue queue2 = s.newThreadQueue(true);
-		ThreadQueue queue3 = s.newThreadQueue(true);
-		
-		KThread thread1 = new KThread();
-		KThread thread2 = new KThread();
-		KThread thread3 = new KThread();
-		KThread thread4 = new KThread();
-		thread1.setName("thread1");
-		thread2.setName("thread2");
-		thread3.setName("thread3");
-		thread4.setName("thread4");
-
-		
-		boolean intStatus = Machine.interrupt().disable();
-		
-		queue3.acquire(thread1); // q3.owner = t1
-		queue.acquire(thread1); // q1.owner = t1
-		queue.waitForAccess(thread2); // q1.wait = t2
-		queue2.acquire(thread4); // q2.owner = t4
-		queue2.waitForAccess(thread1); // q2.wait = t1
-		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
-		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
-		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
-		
-		s.getThreadState(thread2).setPriority(3); 
-		// t2 donates to t1,
-		// t1 = 1 + 2 = 3
-		// t1 donates to t4,
-		// t4 = 1 + 2 = 3
-		
-		System.out.println("After setting thread2's EP=3:");
-		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
-		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
-		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
-		
-		queue.waitForAccess(thread3); // q1.wait = t2, t3
-		s.getThreadState(thread3).setPriority(5); // t3 = 5
-		// t3 donates to t1
-		// t1 = 1 + 2 + 4 = 7
-		// t1 donates to t4
-		// t4 = 1 + 6 = 7
-		
-		System.out.println("After adding thread3 with EP=5:");
-		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
-		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
-		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
-		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
-		
-		s.getThreadState(thread3).setPriority(2); // t3 = 2
-		System.out.print("Queue 1 : ");
-		queue.print();
-		// t3 donates to t1
-		// t1 = 1 + 2 + 1 = 4
-		// t1 donates to t4
-		// t4 = 1 + 3 = 4
-		
-		System.out.println("After setting thread3 EP=2:");
-		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
-		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
-		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
-		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
-		
-		s.getThreadState(thread3).setPriority(1);
-		s.getThreadState(thread2).setPriority(1);
-		
-		System.out.println("After setting all priorities to 1:");
-		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
-		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
-		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
-		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
-		
-		System.out.println("--------End LotteryScheduler test 1------------------");
-		System.out.println("\n--------LotteryScheduler test 2------------------");
-		
-
-		thread1 = new KThread();
-		thread2 = new KThread();
-		thread3 = new KThread();
-		thread4 = new KThread();
-		thread1.setName("thread1");
-		thread2.setName("thread2");
-		thread3.setName("thread3");
-		thread4.setName("thread4");
-		
-		queue = s.newThreadQueue(false);
-
-		queue.waitForAccess(thread1);
-		queue.waitForAccess(thread2);
-		queue.waitForAccess(thread3);
-		queue.waitForAccess(thread4);
-
-		queue.print();
-		s.getThreadState(thread1).setPriority(1);
-		queue.print();
-		s.getThreadState(thread2).setPriority(1);
-		queue.print();
-		s.getThreadState(thread3).setPriority(49);
-		queue.print();
-		s.getThreadState(thread4).setPriority(49);
-		
-		queue.print();
-		int tally[] = new int[4];
-		for (int i = 0; i < 1000; ++i)
-		{
-			KThread n = queue.nextThread();
-//			System.out.println("next returns " + n.getName());
-			switch(n.getName())
-			{
-				case("thread1"):
-					tally[0]++;
-					break;
-				case("thread2"):
-					tally[1]++;
-					break;
-				case("thread3"):
-					tally[2]++;
-					break;
-				case("thread4"):
-					tally[3]++;
-					break;
-				default:
-					System.out.println("ERROR: unknown thread name");
-			}
-//			queue.print();
-			queue.waitForAccess(n);
-		}
-		System.out.print("Threads Run Result: ");
-		for (int i = 0; i < tally.length; ++i)
-		{
-			System.out.print(tally[i] + "  ");
-		}
-		System.out.println("\n--------End LotteryScheduler test 2------------------");
-		Machine.interrupt().restore(intStatus);
-	}
-	*/
+    
+//    public static void selfTest() {
+//		System.out.println("---------LotteryScheduler test 1---------------------");
+//		LotteryScheduler s = new LotteryScheduler();
+//		ThreadQueue queue = s.newThreadQueue(true);
+//		ThreadQueue queue2 = s.newThreadQueue(true);
+//		ThreadQueue queue3 = s.newThreadQueue(true);
+//		
+//		KThread thread1 = new KThread();
+//		KThread thread2 = new KThread();
+//		KThread thread3 = new KThread();
+//		KThread thread4 = new KThread();
+//		thread1.setName("thread1");
+//		thread2.setName("thread2");
+//		thread3.setName("thread3");
+//		thread4.setName("thread4");
+//
+//		
+//		boolean intStatus = Machine.interrupt().disable();
+//		
+//		queue3.acquire(thread1); // q3.owner = t1
+//		queue.acquire(thread1); // q1.owner = t1
+//		queue.waitForAccess(thread2); // q1.wait = t2
+//		queue2.acquire(thread4); // q2.owner = t4
+//		queue2.waitForAccess(thread1); // q2.wait = t1
+//		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+//		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+//		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+//		
+//		s.getThreadState(thread2).setPriority(3); 
+//		// t2 donates to t1,
+//		// t1 = 1 + 2 = 3
+//		// t1 donates to t4,
+//		// t4 = 1 + 2 = 3
+//		
+//		System.out.println("After setting thread2's EP=3:");
+//		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+//		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+//		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+//		
+//		queue.waitForAccess(thread3); // q1.wait = t2, t3
+//		s.getThreadState(thread3).setPriority(5); // t3 = 5
+//		// t3 donates to t1
+//		// t1 = 1 + 2 + 4 = 7
+//		// t1 donates to t4
+//		// t4 = 1 + 6 = 7
+//		
+//		System.out.println("After adding thread3 with EP=5:");
+//		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+//		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+//		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
+//		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+//		
+//		s.getThreadState(thread3).setPriority(2); // t3 = 2
+//		System.out.print("Queue 1 : ");
+//		queue.print();
+//		// t3 donates to t1
+//		// t1 = 1 + 2 + 1 = 4
+//		// t1 donates to t4
+//		// t4 = 1 + 3 = 4
+//		
+//		System.out.println("After setting thread3 EP=2:");
+//		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+//		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+//		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
+//		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+//		
+//		s.getThreadState(thread3).setPriority(1);
+//		s.getThreadState(thread2).setPriority(1);
+//		
+//		System.out.println("After setting all priorities to 1:");
+//		System.out.println("thread1 EP="+s.getThreadState(thread1).getEffectivePriority());
+//		System.out.println("thread2 EP="+s.getThreadState(thread2).getEffectivePriority());
+//		System.out.println("thread3 EP="+s.getThreadState(thread3).getEffectivePriority());
+//		System.out.println("thread4 EP="+s.getThreadState(thread4).getEffectivePriority());
+//		
+//		System.out.println("--------End LotteryScheduler test 1------------------");
+//		System.out.println("\n--------LotteryScheduler test 2------------------");
+//		
+//
+//		thread1 = new KThread();
+//		thread2 = new KThread();
+//		thread3 = new KThread();
+//		thread4 = new KThread();
+//		thread1.setName("thread1");
+//		thread2.setName("thread2");
+//		thread3.setName("thread3");
+//		thread4.setName("thread4");
+//		
+//		queue = s.newThreadQueue(false);
+//
+//		queue.waitForAccess(thread2);
+//		queue.waitForAccess(thread3);
+//		queue.waitForAccess(thread4);
+//
+//		queue.print();
+//		s.getThreadState(thread1).setPriority(1);
+//		queue.print();
+//		s.getThreadState(thread2).setPriority(1);
+//		queue.print();
+//		s.getThreadState(thread3).setPriority(49);
+//		queue.print();
+//		s.getThreadState(thread4).setPriority(49);
+//		queue.waitForAccess(thread1);
+//		
+//		queue.print();
+//		int tally[] = new int[4];
+//		for (int i = 0; i < 1000; ++i)
+//		{
+//			KThread n = queue.nextThread();
+////			System.out.println("next returns " + n.getName());
+//			switch(n.getName())
+//			{
+//				case("thread1"):
+//					tally[0]++;
+//					break;
+//				case("thread2"):
+//					tally[1]++;
+//					break;
+//				case("thread3"):
+//					tally[2]++;
+//					break;
+//				case("thread4"):
+//					tally[3]++;
+//					break;
+//				default:
+//					System.out.println("ERROR: unknown thread name");
+//			}
+////			queue.print();
+//			queue.waitForAccess(n);
+////			queue.print();
+//		}
+//		System.out.print("Threads Run Result: ");
+//		for (int i = 0; i < tally.length; ++i)
+//		{
+//			System.out.print(tally[i] + "  ");
+//		}
+//		System.out.println("\n--------End LotteryScheduler test 2------------------");
+//		System.out.println("\n--------LotteryScheduler test 3------------------");
+//		
+//		thread1 = new KThread();
+//		thread2 = new KThread();
+//		thread3 = new KThread();
+//		thread4 = new KThread();
+//		thread1.setName("thread1");
+//		thread2.setName("thread2");
+//		thread3.setName("thread3");
+//		thread4.setName("thread4");
+//		
+//		queue = s.newThreadQueue(true);
+//
+//		queue.acquire(thread1);
+//		queue.waitForAccess(thread2);
+//		s.getThreadState(thread2).setPriority(100);
+//		
+//		System.out.println("thread2 donates 99 tickets to thread1");
+//		System.out.println("thread1 EP = " + s.getThreadState(thread1).getEffectivePriority());
+//		queue.print();
+//		
+//		queue.waitForAccess(thread1);
+//		System.out.println("thread1 goes back to queue, retains 100 tickets");
+//		System.out.println("thread1 EP = " + s.getThreadState(thread1).getEffectivePriority());
+//		queue.print();
+//		
+//		queue.acquire(thread2);
+//		System.out.println("thread2 acquired queue, regains 99 tickets");
+//		System.out.println("thread2 EP = " + s.getThreadState(thread2).getEffectivePriority());
+//		queue.print();
+//		
+//		queue.waitForAccess(thread3);
+//		System.out.println("thread3 joins queue, donates nothing");
+//		System.out.println("thread2 EP = " + s.getThreadState(thread2).getEffectivePriority());
+//		queue.print();
+//		
+//		s.getThreadState(thread3).setPriority(50);
+//		System.out.println("thread3 sets priority = 50, donates 49 to thread2");
+//		System.out.println("thread2 EP = " + s.getThreadState(thread2).getEffectivePriority());
+//		queue.print();
+//		
+//		queue.waitForAccess(thread2);
+//		System.out.println("thread2 goes back to queue, retains 149 tickets");
+//		System.out.println("thread2 EP = " + s.getThreadState(thread2).getEffectivePriority());
+//		queue.print();
+//		
+//		queue.acquire(thread3);
+//		System.out.println("thread3 acquired queue, gains 148 tickets");
+//		System.out.println("thread3 EP = " + s.getThreadState(thread3).getEffectivePriority());
+//		queue.print();
+//		
+//		s.getThreadState(thread3).setPriority(1);
+//		System.out.println("thread3 sets priority = 1, loses 49 tickets");
+//		System.out.println("thread3 EP = " + s.getThreadState(thread3).getEffectivePriority());
+//		queue.print();
+//		
+//		System.out.println("\n--------End LotteryScheduler test 3------------------");
+//		Machine.interrupt().restore(intStatus);
+//	}
 }
