@@ -50,3 +50,4 @@
 /Communicator$ComTest.class
 /LotteryScheduler$LotteryQueue.class
 /LotteryScheduler$ThreadState.class
+/LotteryScheduler$PriorityThreadQueue.class
