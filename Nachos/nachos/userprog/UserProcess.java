@@ -39,6 +39,7 @@ public class UserProcess {
 		lock.release();
 		// Initialize fileList
 		fileList = new OpenFile[MAX_FILES];
+		filePosList = new int[MAX_FILES];
 		
 		// Set fileList's first 2 elements with stdin and stdout (supported by console)
 		fileList[STDINPUT] = UserKernel.console.openForReading();
@@ -588,15 +589,24 @@ public class UserProcess {
 		
 		// Read up to size bytes and save the number of bytes read
 		byte[] readBuffer = new byte[size];
-		int bytesRead = fileList[fileDescriptor].read(readBuffer, 0, size);
+		int bytesRead;
+		if(fileDescriptor < 2) { // comment if error
+			bytesRead = fileList[fileDescriptor].read(readBuffer, 0, size); 
+		} // comment if error
+		else {	// comment if error
+			bytesRead = fileList[fileDescriptor].read(filePosList[fileDescriptor], readBuffer, 0, size); // comment if error
+		}	// comment if error
 		
 		// Return -1 if failed to read
-		if(bytesRead == -1) {
+		if(bytesRead == -1 || bytesRead == 0) {
 			return -1;
 		}
 		
-		// Write the buffer into the virtual memory and return bytes transferred
+		// Write the buffer into the virtual memory, update file position, and return bytes transferred
 		int bytesTransferred = writeVirtualMemory(vaddr, readBuffer, 0, bytesRead);
+		if(fileDescriptor >= 2) { // comment if error
+			filePosList[fileDescriptor] += bytesTransferred;	// comment if error
+		}	// comment if error
 		return bytesTransferred;
 	}
 	
@@ -636,9 +646,19 @@ public class UserProcess {
 		byte[] writeBuffer = new byte[size];
 		int bytesToWrite = readVirtualMemory(vaddr, writeBuffer, 0, size);
 		
-		// Write the file and return number of bytes written
-		int bytesWritten =  fileList[fileDescriptor].write(writeBuffer, 0, bytesToWrite);
-		return bytesWritten;
+		// Write the file, update file position, and return number of bytes written
+		int bytesWritten;
+		if(fileDescriptor < 2) { // comment if error
+			bytesWritten =  fileList[fileDescriptor].write(writeBuffer, 0, bytesToWrite);
+		}	// comment if error
+		else {	// comment if error
+			bytesWritten =  fileList[fileDescriptor].write(filePosList[fileDescriptor], writeBuffer, 0, bytesToWrite);	// comment if error
+		}	// comment if error
+		if(fileDescriptor >= 2) {	// comment if error
+			filePosList[fileDescriptor] += (bytesWritten > 0) ? bytesWritten : 0;	// comment if error
+		}	// comment if error
+		return (bytesWritten < size && bytesWritten != 0) ? -1 : bytesWritten;	// comment if error
+		// return bytesWritten;	// uncomment if error
 	}
 	
 	/**
@@ -672,6 +692,7 @@ public class UserProcess {
 		// Close and remove the element from the list
 		fileList[fileDescriptor].close();
 		fileList[fileDescriptor] = null;
+		filePosList[fileDescriptor] = 0;
 		return 0;
 	}
 	
@@ -934,6 +955,7 @@ public class UserProcess {
 	private OpenFile[] fileList;
 	private final int MAX_FILES = 16;
 	private final int MAX_STRLENGTH = 256;
+	private int[] filePosList;	// corresponding files
 	
 	
 	/** Get the next available index for fileList */
