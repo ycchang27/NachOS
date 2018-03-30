@@ -60,3 +60,4 @@ local.properties
 
 # Except
 !Nachos/nachos/test/*.o
+!Nachos/nachos/test/*.a
