@@ -7,6 +7,7 @@ import nachos.userprog.*;
 import java.io.EOFException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 
 /**
@@ -37,9 +38,10 @@ public class UserProcess {
 		lock.acquire();
 		processID = UserKernel.numProcess ++;
 		lock.release();
-		// Initialize fileList
+		// Initialize fileList and filePosList
 		fileList = new OpenFile[MAX_FILES];
 		filePosList = new int[MAX_FILES];
+		fileDeleteList = new HashSet<String>();
 		
 		// Set fileList's first 2 elements with stdin and stdout (supported by console)
 		fileList[STDINPUT] = UserKernel.console.openForReading();
@@ -480,8 +482,6 @@ public class UserProcess {
 		return 0;
 	}
 	
-	
-	
 	/**
 	 * Attempt to open the named disk file, creating it if it does not exist,
 	 * and return a file descriptor that can be used to access the file.
@@ -501,10 +501,10 @@ public class UserProcess {
 		
 		// Return -1 if the file name is invalid or the list is full
 		int fileDescriptor = getAvailIndex();
-		if(fileName == null || fileDescriptor == -1) {
+		if(fileName == null || fileDescriptor == -1 || fileDeleteList.contains(fileName)) {
 			return -1;
 		}
-		
+
 		// Try creating the OpenFile
 		OpenFile file = UserKernel.fileSystem.open(fileName, true);
 		
@@ -536,7 +536,7 @@ public class UserProcess {
 
 		// Return -1 if the file name is invalid or the list is full
 		int fileDescriptor = getAvailIndex();
-		if(fileName == null || fileDescriptor == -1) {
+		if(fileName == null || fileDescriptor == -1 || fileDeleteList.contains(fileName)) {
 			return -1;
 		}
 
@@ -690,10 +690,23 @@ public class UserProcess {
 		}
 		
 		// Close and remove the element from the list
+		String fileName = fileList[fileDescriptor].getName();
 		fileList[fileDescriptor].close();
 		fileList[fileDescriptor] = null;
 		filePosList[fileDescriptor] = 0;
-		return 0;
+		
+		// Attempt to delete file if this file is unlinked
+		if(fileDeleteList.contains(fileName)) {	// comment if error
+			if(UserKernel.fileSystem.remove(fileName) == true) {	// comment if error
+				fileDeleteList.remove(fileName);	// comment if error
+				return 0;	// comment if error
+			}	// comment if error
+			else {
+				return -1;	// comment if error
+			}	// comment if error
+		}	// comment if error
+		
+		return 0;	// success
 	}
 	
 	/**
@@ -722,16 +735,24 @@ public class UserProcess {
 		}
 		
 		// Search for index
-		int fileDescriptor = searchFile(fileName);
+//		int fileDescriptor = searchFile(fileName);	// uncomment if error
 		
-		// Return -1 if the file still exists in fileList
-		if(fileDescriptor != -1) {
-			return -1;
-		}
+//		// Return -1 if the file still exists in fileList	// uncomment if error
+//		if(fileDescriptor != -1) {	// uncomment if error
+//			return -1;	// uncomment if error
+//		}	// uncomment if error
 		
-		// Remove the file from the UserKernel's fileSystem and return the result
+		// Attempt to remove the file from the UserKernel's fileSystem
 		boolean removeSuccess = UserKernel.fileSystem.remove(fileName);
-		return (removeSuccess == true) ? 0 : -1;
+
+		// Just unlink if the file is being used by other processes
+		if(removeSuccess == false) {	// comment if error
+			fileDeleteList.add(fileName);	// comment if error
+			return -1;	// comment if error
+		}	// comment if error
+		
+		return 0;	// success	// comment if error
+		// return (removeSuccess == true) ? 0 : -1;	// uncomment if error
 	}
 
 	private int handleExec(int vaddr, int a1, int a2 )
@@ -957,6 +978,8 @@ public class UserProcess {
 	private final int MAX_STRLENGTH = 256;
 	private int[] filePosList;	// corresponding files
 	
+	/** HashSet of whether the file is to be deleted, not allowing creat or open */
+	private static HashSet<String> fileDeleteList;
 	
 	/** Get the next available index for fileList */
 	private int getAvailIndex() {

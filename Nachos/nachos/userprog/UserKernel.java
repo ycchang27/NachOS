@@ -125,7 +125,7 @@ public class UserKernel extends ThreadedKernel {
 		String shellProgram = Machine.getShellProgramName();
 		
 		// pass arguments for coff files here!!
-		String[] arguments = {"2"};
+		String[] arguments = {"3"};
 		Lib.assertTrue(process.execute(shellProgram, arguments));
 
 		

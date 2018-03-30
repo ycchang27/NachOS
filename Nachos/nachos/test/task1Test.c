@@ -4,7 +4,7 @@
 #define MAXOPENFILES 14
 
 // menu to choose which test to run
-enum TESTOPTION {CREAT, OPEN, READ_WRITE};
+enum TESTOPTION {CREAT, OPEN, READ_WRITE, CLOSE_UNLINK};
 
 /** tests the following:
  *  - whether creat successfully creates a file
@@ -148,6 +148,87 @@ void read_writeTest() {
   printf("Read & Write Test complete!\n");
 }
 
+/** tests the following:
+ *  - whether creat successfully creates a file
+ *  - whether close successfully removes OpenFile from the list
+ *  - whether unlink successfully removes the file
+ *  - whether unlink doesn't remove the file (only prevents creat and open)
+ *  and have close handle removal if the file is being accessed (after removal,
+ *  creat and open should work)
+ *  Note: This doesn't test multiple UserProcess situation (needs to be tested in NachOS)
+ */
+void close_unlinkTest() {
+  // test whether creat successfully creates a file
+  char* fileName1 = "removeMe1.txt\0";
+  char* fileName2 = "removeMe2.txt\0";
+  int file1 = creat(fileName1);
+  int file2 = creat(fileName2);
+  int file3 = creat(fileName2);
+  if(file1 != -1) {
+    printf("creat successfully creates a file!\n");
+  }
+  else {
+    printf("creat unsuccessfully creates a file!\n");
+    return;
+  }
+
+  // test whether close successfully removes OpenFile from the list
+  close(file1);
+  void* buffer;
+  int count = 1;
+  int transferred = read(file1, buffer, count);
+  if(transferred == -1 && write(file1, buffer, transferred) == -1) {
+    printf("close successfully removed OpenFile from the list\n");
+  }
+  else {
+    printf("close unsuccessfully removed OpenFile from the list\n");
+    return;
+  }
+
+  // test whether whether unlink successfully removes the file
+  if(unlink(fileName1) != -1) {
+    printf("unlink successfully removed the file: %s!\n", fileName1);
+  }
+  else {
+    printf("unlink unsuccessfully removed the file: %s!\n", fileName1);
+    return;
+  }
+
+  // whether unlink doesn't remove the file (only prevents creat and open)
+  // and have close handle removal if the file is being accessed (after removal,
+  // creat and open should work)
+  if(unlink(fileName2) == -1) {
+    printf("unlink successfully failed to remove the file: %s!\n", fileName2);
+  }
+  else {
+    printf("unlink unsuccessfully failed to remove the file: %s!\n", fileName2);
+    return;
+  }
+  if(creat(fileName2) == -1 && open(fileName2) == -1) {
+    printf("creat and open successfully failed to work\n");
+  }
+  else {
+    printf("creat and open unsuccessfully failed to work\n");
+    return;
+  }
+  if(close(file2) == -1 && close(file3) == 0) {
+    printf("close successfully removed %s from the disk!\n", fileName2);
+  }
+  else {
+    printf("close unsuccessfully removed %s from the disk\n!", fileName2);
+    return;
+  }
+  if(creat(fileName2) != -1 && open(fileName2) != -1) {
+    printf("creat and open successfully work again for the file: %s\n", fileName2);
+  }
+  else {
+    printf("creat and open unsuccessfully work again for the file: %s\n", fileName2);
+    return;
+  }
+
+  printf("Close & Unlink Test complete!\n");
+}
+
 
 int main(int argc, char** argv) {
   // get test # (regarding test #'s, check enum above)
@@ -169,6 +250,10 @@ int main(int argc, char** argv) {
     case READ_WRITE:
       printf("Chose READ_WRITE test!\n");
       read_writeTest();
+      break;
+    case CLOSE_UNLINK:
+      printf("Chose CLOSE_UNLINK test!\n");
+      close_unlinkTest();
       break;
     default:
       printf("Chose not supported test!\n");
