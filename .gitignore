@@ -57,3 +57,6 @@ local.properties
 *.coff
 *.o
 *.a
+
+# Except
+!Nachos/nachos/test/*.o
