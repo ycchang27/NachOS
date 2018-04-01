@@ -46,7 +46,21 @@ public class UserKernel extends ThreadedKernel {
 	 */
 	public void selfTest() {
 		super.selfTest();
-
+		
+		System.out.println("Testing the readVirtualMemory with empty pageTable.");
+		System.out.println("Should return error or null");
+		
+		UserProcess process = UserProcess.newUserProcess();
+		String test = process.readVirtualMemoryString(Machine.processor().readRegister(Machine.processor().regA0), 256);
+		System.out.println(test);
+		
+		byte[] reader = new byte[Machine.processor().readRegister(Machine.processor().regA0)];
+		
+		process.numPages = pageTable.size();
+		
+		int test1 =process.writeVirtualMemory(Machine.processor().readRegister(Machine.processor().regA1), reader);
+		System.out.println(test1);
+		
 //		System.out.println("Testing the console device. Typed characters");
 //		System.out.println("will be echoed until q is typed.");
 //
@@ -92,11 +106,12 @@ public class UserKernel extends ThreadedKernel {
 		process.handleException(cause);
 	}
 
-	public static int retrievePage() {
+	public static int getPage() {
 		int pageNumber = -1;
-		Lib.assertTrue(pageNumber < 0);
+		// Lib.assertTrue(pageNumber < 0);
+
 		Machine.interrupt().disable();
-		if (!pageTable.isEmpty())
+		if (pageTable.isEmpty() == false)
 			pageNumber = pageTable.removeFirst();
 		Machine.interrupt().enable();
 		return pageNumber;
@@ -107,7 +122,6 @@ public class UserKernel extends ThreadedKernel {
 		Machine.interrupt().disable();
 		pageTable.add(pageNum);
 		Machine.interrupt().enable();
-
 	}
 
 	/**
@@ -133,8 +147,8 @@ public class UserKernel extends ThreadedKernel {
 	}
 	
 	public static boolean deletePage(int ppn) {
-        boolean value = false;
-
+		boolean value = false;
+		
         pageLock.acquire();
         pageTable.add(new Integer(ppn));
         value = true;
