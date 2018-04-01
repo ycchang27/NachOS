@@ -26,24 +26,16 @@ public class UserProcess {
 	public UserProcess() {
 		int numPhysPages = Machine.processor().getNumPhysPages();
 		pageTable = new TranslationEntry[numPhysPages];
+
 		for (int i = 0; i < numPhysPages; i++) {
-			// pageTable[i] = new TranslationEntry(i,i, true,false,false,false);// this is what was causing the problems!! 
 			pageTable[i] = new TranslationEntry(i, 0, false, false, false, false);
-			// in comparison to the code
 		}
 
 		boolean inStatus = Machine.interrupt().disable();
-		// Set Process ID
 		lock1.acquire();
-		processID = UserKernel.numProcess++; // this might be the reason why this isn't working!!
-		// processID = counter++;
+		processID = UserKernel.numProcess++;
 		lock1.release();
-		// Initialize fileList and filePosList
 		fileList = new OpenFile[MAX_FILES];
-		//filePosList = new int[MAX_FILES];
-		//fileDeleteList = new HashSet<String>();
-
-		// Set fileList's first 2 elements with stdin and stdout (supported by console)
 		fileList[STDINPUT] = UserKernel.console.openForReading();
 		fileList[STDOUTPUT] = UserKernel.console.openForWriting();
 		Machine.interrupt().restore(inStatus);
@@ -78,8 +70,6 @@ public class UserProcess {
 		if (!load(name, args))
 			return false;
 
-		Lib.debug(dbgProcess, "process created, pid = " + processID);
-		//
 		thread = (UThread) (new UThread(this).setName(name));
 		thread.fork();
 
@@ -101,42 +91,34 @@ public class UserProcess {
 		Machine.processor().setPageTable(pageTable);
 	}
 
+	/*
+	* Allocates 
+	*
+	*
+	*/
 	protected boolean allocate(int vpn, int desiredPages, boolean readOnly) {
 
 		LinkedList<TranslationEntry> allocated = new LinkedList<TranslationEntry>();
-
+		
 		for (int i = 0; i < desiredPages; ++i) {
 			if (vpn >= pageTable.length)
 				return false;
-
 			int ppn = UserKernel.retrievePage();
-			if (ppn == -1) {
-				Lib.debug(dbgProcess, "\tcannot allocate new page");
-
+			if (ppn != -1) {
+				TranslationEntry a = new TranslationEntry(vpn + i, ppn, true, readOnly, false, false);
+				allocated.add(a);
+				pageTable[vpn + i] = a;
+				++numPages;
+			} else {
 				for (TranslationEntry te : allocated) {
 					pageTable[te.vpn] = new TranslationEntry(te.vpn, 0, false, false, false, false);
 					UserKernel.deletePage(te.ppn);
 					--numPages;
 				}
-
 				return false;
-			} else {
-				TranslationEntry a = new TranslationEntry(vpn + i, ppn, true, readOnly, false, false);
-				allocated.add(a);
-				pageTable[vpn + i] = a;
-				++numPages;
 			}
 		}
 		return true;
-	}
-
-	protected void releaseResource() {
-		for (int i = 0; i < pageTable.length; ++i)
-			if (pageTable[i].valid) {
-				UserKernel.deletePage(pageTable[i].ppn);
-				pageTable[i] = new TranslationEntry(pageTable[i].vpn, 0, false, false, false, false);
-			}
-		numPages = 0;
 	}
 
 	/**
@@ -246,14 +228,6 @@ public class UserProcess {
 			transfer += amount;
 		}
 
-		/**if (vaddr < 0 || vaddr >= memory.length)
-			return 0;
-		
-		int amount = Math.min(length, memory.length-vaddr);
-		System.arraycopy(memory, vaddr, data, offset, amount);
-		
-		return amount;
-		*/
 		return transfer;
 	}
 
@@ -331,15 +305,6 @@ public class UserProcess {
 			System.arraycopy(data, offset + transfer, memory, paddr, amount);
 			transfer += amount;
 		}
-		/**
-		if (vaddr < 0 || vaddr >= memory.length)
-			return 0;
-		
-		int amount = Math.min(length, memory.length-vaddr);
-		System.arraycopy(data, offset, memory, vaddr, amount);
-		
-		return amount;
-		*/
 		return transfer;
 	}
 
@@ -382,7 +347,12 @@ public class UserProcess {
 				return false;
 			}
 			if (!allocate(numPages, section.getLength(), section.isReadOnly())) {
-				releaseResource();
+				for (int i = 0; i < pageTable.length; ++i)
+					if (pageTable[i].valid) {
+						UserKernel.deletePage(pageTable[i].ppn);
+						pageTable[i] = new TranslationEntry(pageTable[i].vpn, 0, false, false, false, false);
+					}
+				numPages = 0;
 				return false;
 			}
 		}
@@ -406,14 +376,24 @@ public class UserProcess {
 
 		// next comes the stack; stack pointer initially points to top of it
 		if (!allocate(numPages, stackPages, false)) {
-			releaseResource();
+			for (int i = 0; i < pageTable.length; ++i)
+				if (pageTable[i].valid) {
+					UserKernel.deletePage(pageTable[i].ppn);
+					pageTable[i] = new TranslationEntry(pageTable[i].vpn, 0, false, false, false, false);
+				}
+			numPages = 0;
 			return false;
 		}
 		initialSP = numPages * pageSize;
 
 		// and finally reserve 1 page for arguments
 		if (!allocate(numPages, 1, false)) {
-			releaseResource();
+			for (int i = 0; i < pageTable.length; ++i)
+				if (pageTable[i].valid) {
+					UserKernel.deletePage(pageTable[i].ppn);
+					pageTable[i] = new TranslationEntry(pageTable[i].vpn, 0, false, false, false, false);
+				}
+			numPages = 0;
 			return false;
 		}
 
@@ -478,8 +458,14 @@ public class UserProcess {
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
-		releaseResource();
-		for (int i = 0; i < 16; i++) {
+		int i;
+		for (i = 0; i < pageTable.length; ++i)
+			if (pageTable[i].valid) {
+				UserKernel.deletePage(pageTable[i].ppn);
+				pageTable[i] = new TranslationEntry(pageTable[i].vpn, 0, false, false, false, false);
+			}
+		numPages = 0;
+		for (i = 0; i < 16; i++) {
 			if (fileList[i] != null) {
 				fileList[i].close();
 				fileList[i] = null;
@@ -517,9 +503,9 @@ public class UserProcess {
 	 */
 	private int handleHalt() {
 		if (processID != 0) {
-			return 0;
+			System.out.println("processID is not root");
+			return -1;
 		}
-
 		Machine.halt();
 
 		Lib.assertNotReached("Machine.halt() did not halt machine!");
@@ -539,7 +525,7 @@ public class UserProcess {
 			UserProcess child = children.removeFirst();
 			child.parent = null;
 		}
-		System.out.println("hehe exit" + processID + status);
+		System.out.println("exit" + processID + status);
 
 		if (processID == 0) {
 			Kernel.kernel.terminate();
@@ -550,7 +536,6 @@ public class UserProcess {
 
 	}
 
-	//
 	private int handleExec(int nameVAddr, int argsNum, int argsVAddr) {
 		if (nameVAddr < 0 || argsNum < 0 || argsVAddr < 0) {
 			Lib.debug(dbgProcess, "handleExec:Invalid parameter");
@@ -703,15 +688,11 @@ public class UserProcess {
 	}
 
 	private int handleRead(int descriptor, int bufferVAddr, int size) {
-		if (descriptor < 0 || descriptor > 15) {
-			Lib.debug(dbgProcess, "handleRead:Descriptor out of range");
-			return -1;
-		}
-		if (size < 0) {
-			Lib.debug(dbgProcess, "handleRead:Size to read cannot be negative");
+		if (descriptor < 0 || descriptor > 15 || size < 0) {
 			return -1;
 		}
 		OpenFile file;
+
 		if (fileList[descriptor] == null) {
 			Lib.debug(dbgProcess, "handleRead:File doesn't exist in the descriptor table");
 			return -1;
@@ -781,26 +762,34 @@ public class UserProcess {
 			return -1;
 		}
 		String fileName = readVirtualMemoryString(vaddr, 256);
+
 		if (fileName == null) {
 			Lib.debug(dbgProcess, "handleUnlink:Read filename failed");
 			return -1;
 		}
 		OpenFile file;
+
 		int index = -1;
-		for (int i = 0; i < 16; i++) {
-			file = fileList[i];
+
+		int j = 0;
+		while (j < 16) {
+			file = fileList[j];
 			if (file != null && file.getName().compareTo(fileName) == 0) {
-				index = i;
+				index = j;
 				break;
 			}
+			j++;
 		}
+
 		if (index != -1) {
-			Lib.debug(dbgProcess, "handleUnlink:File should be closed first");
+			System.out.println("handleUnlink: File should be closed first");
 			return -1;
 		}
-		boolean isSuccessful = ThreadedKernel.fileSystem.remove(fileName);
-		if (!isSuccessful) {
-			Lib.debug(dbgProcess, "handleUnlink:Remove failed");
+
+		boolean didRemove = ThreadedKernel.fileSystem.remove(fileName);
+
+		if (!didRemove) {
+			System.out.println("handleUnlink:Remove failed");
 			return -1;
 		}
 
@@ -967,7 +956,6 @@ public class UserProcess {
 	protected Lock lock;
 	protected UThread thread;
 	protected static int counter = 0;
-
 	protected OpenFile stdin;
 
 	protected OpenFile stdout;
