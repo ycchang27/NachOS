@@ -2,7 +2,6 @@ package nachos.userprog;
 
 import nachos.machine.*;
 import nachos.threads.*;
-
 import java.io.EOFException;
 import java.util.*;
 
@@ -32,33 +31,25 @@ public class UserProcess {
 		}
 
 		//create a new lock for the function implementation
-				lock = new Lock();
-				
-				boolean stat =Machine.interrupt().disable();
-				// Set Process ID
-				lock.acquire();
-				processID = counter ++;
-				lock.release();
-				
-				
-				// Initialize fileList
-				fileList = new OpenFile[MAX_FILES];
-				
-				// Set fileList's first 2 elements with stdin and stdout (supported by console)
-				fileList[STDINPUT] = UserKernel.console.openForReading();
-				fileList[STDOUTPUT] = UserKernel.console.openForWriting();
-				
-				Machine.interrupt().restore(stat);
-				
-				//make the parent process null for a given user process
-				parentProcess=null;
-				
-				//make a list of child processes for a "parent" to have if it does have children
-				childProcesses=new LinkedList<UserProcess>();
-				
-				//maintain the list of children status regarding whether to exit or not
-				childProcessStatus=new HashMap<Integer,Integer>();
-				
+		lock = new Lock();
+		boolean stat = Machine.interrupt().disable();
+		lock1.acquire();
+		// processID = UserKernel.numProcess++; // LEX please check this
+		processID = counter++;
+		lock1.release();
+
+		fileList = new OpenFile[MAX_FILES];
+		// Set fileList's first 2 elements with stdin and stdout (supported by console)
+		fileList[STDINPUT] = UserKernel.console.openForReading();
+		fileList[STDOUTPUT] = UserKernel.console.openForWriting();
+		Machine.interrupt().restore(stat);
+
+		//make the parent process null for a given user process
+		parentProcess = null;
+		//make a list of child processes for a "parent" to have if it does have children
+		childProcesses = new LinkedList<UserProcess>();
+		//maintain the list of children status regarding whether to exit or not
+		childProcessStatus = new HashMap<Integer, Integer>();
 	}
 
 	/**
@@ -83,12 +74,11 @@ public class UserProcess {
 	 * @return <tt>true</tt> if the program was successfully executed.
 	 */
 	public boolean execute(String name, String[] args) {
-		if (!load(name, args))
+		if (!load(name, args)) {
 			return false;
-
+		}
 		thread = (UThread) (new UThread(this).setName(name));
 		thread.fork();
-
 		return true;
 	}
 
@@ -107,20 +97,14 @@ public class UserProcess {
 		Machine.processor().setPageTable(pageTable);
 	}
 
-	/*
-	* Allocates 
-	*
-	*
-	*/
-	protected boolean allocate(int vpn, int desiredPages, boolean readOnly) {
+	protected boolean didAllocate(int vpn, int desiredPages, boolean readOnly) {
 
 		LinkedList<TranslationEntry> allocated = new LinkedList<TranslationEntry>();
-		
-		for (int i = 0; i < desiredPages; ++i) {
+
+		for (int i = 0; i < desiredPages; i++) {
 			if (vpn >= pageTable.length)
 				return false;
 			int ppn = UserKernel.getPage();
-
 			if (ppn != -1) {
 				TranslationEntry a = new TranslationEntry(vpn + i, ppn, true, readOnly, false, false);
 				allocated.add(a);
@@ -201,11 +185,9 @@ public class UserProcess {
 	 * @return the number of bytes successfully transferred.
 	 */
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
+		System.out.println("readVM before assertion");
 		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
-		if(numPages == 0) {
-			Lib.debug(dbgProcess, "Read Vritual Memory: Empty pageTable");
-			return 0;
-		}
+		System.out.println("readVM after assertion");
 
 		byte[] memory = Machine.processor().getMemory();
 
@@ -283,12 +265,9 @@ public class UserProcess {
 	 * @return the number of bytes successfully transferred.
 	 */
 	public int writeVirtualMemory(int vaddr, byte[] data, int offset, int length) {
+		System.out.println("Is this failing? (writeVM)");
 		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
-		
-		if(numPages >= pageTable.length) {
-			Lib.debug(dbgProcess, "Write Virtual Memoy: pageTable full");
-			return 0;
-		}
+		System.out.println("Hello World");
 
 		byte[] memory = Machine.processor().getMemory();
 
@@ -296,7 +275,7 @@ public class UserProcess {
 		int transfer = 0;
 
 		if (vaddr < 0 || end > Machine.processor().makeAddress(numPages - 1, pageSize - 1)) {// ||Machine.processor().pageFromAddress(vaddr) < 0) {
-			Lib.debug(dbgProcess, "Write Virtual Memory: Invalid Address");
+			Lib.debug(dbgProcess, "Read Vritual Memory: Invalid Address");
 			return 0;
 		}
 
@@ -368,7 +347,7 @@ public class UserProcess {
 				Lib.debug(dbgProcess, "\tfragmented executable");
 				return false;
 			}
-			if (!allocate(numPages, section.getLength(), section.isReadOnly())) {
+			if (!didAllocate(numPages, section.getLength(), section.isReadOnly())) {
 				for (int i = 0; i < pageTable.length; ++i)
 					if (pageTable[i].valid) {
 						UserKernel.deletePage(pageTable[i].ppn);
@@ -397,7 +376,8 @@ public class UserProcess {
 		initialPC = coff.getEntryPoint();
 
 		// next comes the stack; stack pointer initially points to top of it
-		if (!allocate(numPages, stackPages, false)) {
+		boolean stackAllocation = didAllocate(numPages, stackPages, false);
+		if (!stackAllocation) {
 			for (int i = 0; i < pageTable.length; ++i)
 				if (pageTable[i].valid) {
 					UserKernel.deletePage(pageTable[i].ppn);
@@ -406,10 +386,12 @@ public class UserProcess {
 			numPages = 0;
 			return false;
 		}
+
 		initialSP = numPages * pageSize;
 
 		// and finally reserve 1 page for arguments
-		if (!allocate(numPages, 1, false)) {
+		boolean argumentAllocation = didAllocate(numPages, 1, false);
+		if (!argumentAllocation) {
 			for (int i = 0; i < pageTable.length; ++i)
 				if (pageTable[i].valid) {
 					UserKernel.deletePage(pageTable[i].ppn);
@@ -422,13 +404,10 @@ public class UserProcess {
 		if (!loadSections())
 			return false;
 
-		// store arguments in last page
 		int entryOffset = (numPages - 1) * pageSize;
 		int stringOffset = entryOffset + args.length * 4;
-
 		this.argc = args.length;
 		this.argv = entryOffset;
-
 		for (int i = 0; i < argv.length; i++) {
 			byte[] stringOffsetBytes = Lib.bytesFromInt(stringOffset);
 			Lib.assertTrue(writeVirtualMemory(entryOffset, stringOffsetBytes) == 4);
@@ -438,7 +417,6 @@ public class UserProcess {
 			Lib.assertTrue(writeVirtualMemory(stringOffset, new byte[] { 0 }) == 1);
 			stringOffset += 1;
 		}
-
 		return true;
 	}
 
@@ -534,120 +512,164 @@ public class UserProcess {
 		return 0;
 	}
 
-	private int handleExit(int status)
-	{
-		//check to see if the parent process is valid
-		if(parentProcess != null)
-		{
+	private int handleExit(int status) {
+		if (parentProcess != null) {
 			//acquire the lock for the parent process
-			lock.acquire();
-			//add the process id for process into the children processes status list
+			lock.acquire(); // LEX please check this
 			parentProcess.childProcessStatus.put(processID, status);
-			//release the lock
-			lock.release();
+			lock.release(); // LEX please check this
+			//parent.children.remove(this);
 		}
-		//unload all the information
 		unloadSections();
-		
-		//hold the size of the children list
-		int numberOfChildren = childProcesses.size();
-		
+		int childrenNum = childProcesses.size();
 		//iterate through children list
-		for(int i = 0; i < numberOfChildren; i++)
-		{
+		for (int i = 0; i < childrenNum; i++) {
 			//remove all the children from the childProcessList
 			UserProcess child = childProcesses.removeFirst();
 			//set the child parent back to null
 			child.parentProcess = null;
 		}
-		
+		System.out.println("exit" + processID + status);
+
 		//if the process id is the root terminate 
-		if(processID == 0)
+		if (processID == 0) {
 			Kernel.kernel.terminate();
-		
-		//finish the thread and then return 0
-		else
+		} else {
+			//finish the thread and then return 0
 			UThread.finish();
+		}
 		return 0;
 
 	}
-	
 
-	private int handleJoin(int processID,int virtualAddress)
-	{
-		//if process ID or virtual Address is out of range
-		if(processID < 0 || virtualAddress < 0)
-		{
+	private int handleExec(int virtualAddress, int arg1, int arg2) {
+
+		//check to see if arguments are valid
+		if (virtualAddress < 0 || arg1 < 0 || arg2 < 0) {
+			Lib.debug(dbgProcess, "handleExec:Invalid entry");
 			return -1;
 		}
-		
+
+		//grab the filename from the virtual address
+		//check to see if the address exists
+		String fileName = readVirtualMemoryString(virtualAddress, 256);
+
+		//if file name does not exist return no process ID
+		if (fileName == null) {
+			Lib.debug(dbgProcess, "handleExec:file name does not exist");
+			return -1;
+		}
+
+		//check that the file extension is the correct format
+		if (fileName.contains(".coff") == false) {
+			Lib.debug(dbgProcess, "handleExec: Incorrect file format, need to end with .coff");
+			return -1;
+		}
+
+		//make an array to hold the given arguments
+		String[] argsHolder = new String[arg1];
+
+		//iterate through all values less than argument 1's length
+		for (int i = 0; i < arg1; i++) {
+			//create a new buffer
+			byte[] argBuffer = new byte[4];
+			//create a new variable to hold the length of the virtual memory read
+			int memReadLen = readVirtualMemory(arg2 + i * 4, argBuffer);
+
+			//if address not 4 bytes return -1
+			if (memReadLen != 4) {
+				Lib.debug(dbgProcess, "handleExec:argument address incorect size");
+				return -1;
+			}
+
+			//create a new variable to hold the argument virtual address
+			int argVirtualAddress = Lib.bytesToInt(argBuffer, 0);
+
+			//get the virtual memory string from the virtual address previously grabbed 
+			String arg = readVirtualMemoryString(argVirtualAddress, 256);
+
+			if (arg == null) {
+				Lib.debug(dbgProcess, "handleExec:arugment null");
+				return -1;
+			}
+
+			//store the argument into the args holder object
+			argsHolder[i] = arg;
+		}
+
+		//create a new child process 
+		UserProcess childPro = UserProcess.newUserProcess();
+
+		//if the child process cannot execute, return -1
+		if (childPro.execute(fileName, argsHolder) == false) {
+			Lib.debug(dbgProcess, "handleExec:child process failure");
+			return -1;
+		}
+
+		//set the child process's parent to this process
+		childPro.parentProcess = this;
+
+		//add the child to the child processes list
+		this.childProcesses.add(childPro);
+
+		//return the child process ID 
+		return childPro.processID;
+
+	}
+
+	private int handleJoin(int processID, int statusVAddr) {
+		//if process ID or virtual Address is out of range
+		if (processID < 0 || statusVAddr < 0) {
+			return -1;
+		}
 		//create a child process variable
 		UserProcess child = null;
-		
 		//get the current number of child processes
 		int numberOfChildren = childProcesses.size();
-		
-		
+
 		//iterate through each child
-		for(int i = 0; i < numberOfChildren; i++)
-		{
-			//if child has the same process ID, its okay to join
-			if(childProcesses.get(i).processID==processID)
-			{
-				//set the child as the child in the list with the matching ID
+		for (int i = 0; i < numberOfChildren; i++) {
+			// if child has the same process ID, its okay to join
+			if (childProcesses.get(i).processID == processID) {
+				// set the child as the child in the list with the matching ID 
 				child = childProcesses.get(i);
-			
 				break;
 			}
 		}
-		
+
 		//if the result is null, no parent can join to the child
-		if(child == null)
-		{
-			Lib.debug(dbgProcess, "handleJoin: child cannot allow join");
+		if (child == null) {
+			Lib.debug(dbgProcess, "handleJoin:processID is not the child");
 			return -1;
-			
 		}
-		
-		//at this point the child should be able to join
-		//using the join function, join the child thread
+		// at this point the child should be able to join
+		// using the join function, join the child thread		
 		child.thread.join();
-
-		//set the child's parent to null
 		child.parentProcess = null;
-		
-		//critical code
-		lock.acquire();
-		//wait for the lock and get the child process ID
-		Integer statusCheck = childProcessStatus.get(child.processID);
-		lock.release();
-		
-		//remove the child from the childProcesses Join List
-		childProcesses.remove(child);
-		
-		//if the status is null, child cannot exit
-		if(statusCheck == null)
-			return 0;
-		
-		//if status is not null, the child can exit
-		else
-		{
-			//create a new buffer of 4 bytes
-			byte[] statusBuffer=new byte[4];
-			
-			//get the buffer
-			statusBuffer=Lib.bytesFromInt(statusCheck);
-			
 
+		childProcesses.remove(child); // LEX this is out of order but it works
+
+		// critical code
+		lock.acquire();
+		// wait for the lock and get the child process ID
+		Integer status = childProcessStatus.get(child.processID);
+		lock.release();
+		// remove the child from the childProcesses Join List
+		if (status == null) {
+			//if status is not null, the child can exit
+			Lib.debug(dbgProcess, "handleJoin:Cannot find the exit status of the child");
+			return 0;
+		} else {
+			//create a new buffer of 4 bytes
+			byte[] buffer = new byte[4];
+			//get the buffer
+			buffer = Lib.bytesFromInt(status);
 			//if the value status is 4 bytes we can return 1
-			if(writeVirtualMemory(virtualAddress,statusBuffer) == 4)
-			{
+			int count = writeVirtualMemory(statusVAddr, buffer);
+			if (count == 4) {
 				return 1;
-			}
-			else
-			{
-				Lib.debug(dbgProcess, "handleJoin: cannot write");
-				
+			} else {
+				Lib.debug(dbgProcess, "handleJoin:Write status failed");
 				return 0;
 			}
 		}
@@ -828,92 +850,6 @@ public class UserProcess {
 		return 0;
 
 	}
-	private int handleExec(int virtualAddress, int arg1, int arg2 )
-	{
-		
-		//check to see if arguments are valid
-		if(virtualAddress < 0 || arg1 < 0 || arg2 < 0)
-		{
-			Lib.debug(dbgProcess, "handleExec:Invalid entry");
-			return -1;
-		}
-		
-		//grab the filename from the virtual address
-		//check to see if the address exists
-		String fileName = readVirtualMemoryString(virtualAddress, 256);
-		
-		//if file name does not exist return no process ID
-		if(fileName == null)
-		{
-			Lib.debug(dbgProcess, "handleExec:file name does not exist");
-			return -1;
-		}
-		
-		
-		//check that the file extension is the correct format
-		if(fileName.contains(".coff") == false)
-		{
-			Lib.debug(dbgProcess, "handleExec: Incorrect file format, need to end with .coff");
-			return -1;
-		}
-		
-		//make an array to hold the given arguments
-		String[] argsHolder = new String[arg1];
-		
-		//iterate through all values less than argument 1's length
-		for(int i=0;i<arg1;i++)
-		{
-			//create a new buffer
-			byte[] argBuffer = new byte[4];
-			//create a new variable to hold the length of the virtual memory read
-			int memReadLen = readVirtualMemory(arg2 + i*4, argBuffer);
-			
-			//if address not 4 bytes return -1
-			if(memReadLen != 4)
-			{
-				Lib.debug(dbgProcess, "handleExec:argument address incorect size");
-				return -1;
-			}
-			
-			//create a new variable to hold the argument virtual address
-			int argVirtualAddress = Lib.bytesToInt(argBuffer, 0);
-			
-			//get the virtual memory string from the virtual address previously grabbed 
-			String arg = readVirtualMemoryString(argVirtualAddress,256);
-			
-			
-			if(arg==null)
-			{
-				Lib.debug(dbgProcess, "handleExec:arugment null");
-				return -1;
-			}
-			
-			//store the argument into the args holder object
-			argsHolder[i]=arg;
-		}
-		
-		//create a new child process 
-		UserProcess childPro=UserProcess.newUserProcess();
-		
-		//if the child process cannot execute, return -1
-		if(childPro.execute(fileName, argsHolder) == false)
-		{
-			Lib.debug(dbgProcess, "handleExec:child process failure");
-			return -1;
-		}
-		
-		
-		//set the child process's parent to this process
-		childPro.parentProcess = this;
-		
-		//add the child to the child processes list
-		this.childProcesses.add(childPro);
-		
-		//return the child process ID 
-		return childPro.processID;
-
-	}
-	
 
 	protected static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2, syscallJoin = 3, syscallCreate = 4,
 			syscallOpen = 5, syscallRead = 6, syscallWrite = 7, syscallClose = 8, syscallUnlink = 9;
@@ -1065,21 +1001,15 @@ public class UserProcess {
 
 	protected OpenFile[] fileList;
 
-
 	protected int processID;
 
 	protected OpenFile stdin;
-
 	protected OpenFile stdout;
-	
 	//PART 3 VARIABLES
-		protected UserProcess parentProcess; //hold parent process
-		protected LinkedList<UserProcess> childProcesses; //maintain list of child processes
-		private static Lock lock; //lock needed for implementation
-		protected UThread thread; //thread needed for joining 
-		protected HashMap<Integer,Integer> childProcessStatus; //maintain child status
-		protected static int counter = 0; //needed to make process ID
-		
-		
-
+	protected UserProcess parentProcess; //hold parent process
+	protected LinkedList<UserProcess> childProcesses; //maintain list of child processes
+	private static Lock lock; //lock needed for implementation
+	protected UThread thread; //thread needed for joining 
+	protected HashMap<Integer, Integer> childProcessStatus; //maintain child status
+	protected static int counter = 0; //needed to make process ID
 }
