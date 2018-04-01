@@ -2,7 +2,6 @@ package nachos.userprog;
 
 import nachos.machine.*;
 import nachos.threads.*;
-
 import java.io.EOFException;
 import java.util.*;
 
@@ -67,12 +66,11 @@ public class UserProcess {
 	 * @return <tt>true</tt> if the program was successfully executed.
 	 */
 	public boolean execute(String name, String[] args) {
-		if (!load(name, args))
+		if (!load(name, args)) {
 			return false;
-
+		}
 		thread = (UThread) (new UThread(this).setName(name));
 		thread.fork();
-
 		return true;
 	}
 
@@ -96,10 +94,10 @@ public class UserProcess {
 	*
 	*
 	*/
-	protected boolean allocate(int vpn, int desiredPages, boolean readOnly) {
+	protected boolean didAllocate(int vpn, int desiredPages, boolean readOnly) {
 
 		LinkedList<TranslationEntry> allocated = new LinkedList<TranslationEntry>();
-		
+
 		for (int i = 0; i < desiredPages; i++) {
 			if (vpn >= pageTable.length)
 				return false;
@@ -347,7 +345,7 @@ public class UserProcess {
 				Lib.debug(dbgProcess, "\tfragmented executable");
 				return false;
 			}
-			if (!allocate(numPages, section.getLength(), section.isReadOnly())) {
+			if (!didAllocate(numPages, section.getLength(), section.isReadOnly())) {
 				for (int i = 0; i < pageTable.length; ++i)
 					if (pageTable[i].valid) {
 						UserKernel.deletePage(pageTable[i].ppn);
@@ -376,7 +374,8 @@ public class UserProcess {
 		initialPC = coff.getEntryPoint();
 
 		// next comes the stack; stack pointer initially points to top of it
-		if (!allocate(numPages, stackPages, false)) {
+		boolean stackAllocate = didAllocate(numPages, stackPages, false);
+		if (!stackAllocate) {
 			for (int i = 0; i < pageTable.length; ++i)
 				if (pageTable[i].valid) {
 					UserKernel.deletePage(pageTable[i].ppn);
@@ -385,10 +384,12 @@ public class UserProcess {
 			numPages = 0;
 			return false;
 		}
+
 		initialSP = numPages * pageSize;
 
 		// and finally reserve 1 page for arguments
-		if (!allocate(numPages, 1, false)) {
+		boolean argumentAllocation = didAllocate(numPages, 1, false);
+		if (!argumentAllocation) {
 			for (int i = 0; i < pageTable.length; ++i)
 				if (pageTable[i].valid) {
 					UserKernel.deletePage(pageTable[i].ppn);
@@ -401,13 +402,10 @@ public class UserProcess {
 		if (!loadSections())
 			return false;
 
-		// store arguments in last page
 		int entryOffset = (numPages - 1) * pageSize;
 		int stringOffset = entryOffset + args.length * 4;
-
 		this.argc = args.length;
 		this.argv = entryOffset;
-
 		for (int i = 0; i < argv.length; i++) {
 			byte[] stringOffsetBytes = Lib.bytesFromInt(stringOffset);
 			Lib.assertTrue(writeVirtualMemory(entryOffset, stringOffsetBytes) == 4);
@@ -417,7 +415,6 @@ public class UserProcess {
 			Lib.assertTrue(writeVirtualMemory(stringOffset, new byte[] { 0 }) == 1);
 			stringOffset += 1;
 		}
-
 		return true;
 	}
 
