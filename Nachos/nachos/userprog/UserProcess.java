@@ -100,16 +100,17 @@ public class UserProcess {
 
 		LinkedList<TranslationEntry> allocated = new LinkedList<TranslationEntry>();
 		
-		for (int i = 0; i < desiredPages; ++i) {
+		for (int i = 0; i < desiredPages; i++) {
 			if (vpn >= pageTable.length)
 				return false;
-			int ppn = UserKernel.retrievePage();
+			int ppn = UserKernel.getPage();
 			if (ppn != -1) {
 				TranslationEntry a = new TranslationEntry(vpn + i, ppn, true, readOnly, false, false);
 				allocated.add(a);
 				pageTable[vpn + i] = a;
 				++numPages;
 			} else {
+				// if ppn 
 				for (TranslationEntry te : allocated) {
 					pageTable[te.vpn] = new TranslationEntry(te.vpn, 0, false, false, false, false);
 					UserKernel.deletePage(te.ppn);
