@@ -92,11 +92,12 @@ public class UserKernel extends ThreadedKernel {
 		process.handleException(cause);
 	}
 
-	public static int retrievePage() {
+	public static int getPage() {
 		int pageNumber = -1;
-		Lib.assertTrue(pageNumber < 0);
+		// Lib.assertTrue(pageNumber < 0);
+
 		Machine.interrupt().disable();
-		if (!pageTable.isEmpty())
+		if (pageTable.isEmpty() == false)
 			pageNumber = pageTable.removeFirst();
 		Machine.interrupt().enable();
 		return pageNumber;
@@ -107,7 +108,6 @@ public class UserKernel extends ThreadedKernel {
 		Machine.interrupt().disable();
 		pageTable.add(pageNum);
 		Machine.interrupt().enable();
-
 	}
 
 	/**
@@ -133,8 +133,8 @@ public class UserKernel extends ThreadedKernel {
 	}
 	
 	public static boolean deletePage(int ppn) {
-        boolean value = false;
-
+		boolean value = false;
+		
         pageLock.acquire();
         pageTable.add(new Integer(ppn));
         value = true;
