@@ -119,11 +119,8 @@ public class UserProcess {
 		for (int i = 0; i < desiredPages; ++i) {
 			if (vpn >= pageTable.length)
 				return false;
-<<<<<<< HEAD
 			int ppn = UserKernel.getPage();
-=======
-			int ppn = UserKernel.retrievePage();
->>>>>>> 51931c225c3550be837440518a05960b9d72a343
+
 			if (ppn != -1) {
 				TranslationEntry a = new TranslationEntry(vpn + i, ppn, true, readOnly, false, false);
 				allocated.add(a);
