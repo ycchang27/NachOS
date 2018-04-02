@@ -37,8 +37,12 @@ public class UserProcess {
 		// processID = UserKernel.numProcess++; // LEX please check this
 		processID = counter++;
 		lock1.release();
-
+		
+		// Initialize fileList, filePosList, and fileDeleteList
 		fileList = new OpenFile[MAX_FILES];
+		filePosList = new int[MAX_FILES];
+		fileDeleteList = new HashSet<String>();
+		
 		// Set fileList's first 2 elements with stdin and stdout (supported by console)
 		fileList[STDINPUT] = UserKernel.console.openForReading();
 		fileList[STDOUTPUT] = UserKernel.console.openForWriting();
@@ -522,8 +526,7 @@ public class UserProcess {
 	 * Handle the halt() system call.
 	 */
 	private int handleHalt() {
-		if (processID != 0) {
-			System.out.println("processID is not root");
+		if (processID != ROOTPROCESS) {
 			return -1;
 		}
 		Machine.halt();
@@ -720,182 +723,280 @@ public class UserProcess {
 		}
 	}
 
+	/**
+	 * Attempt to open the named disk file, creating it if it does not exist,
+	 * and return a file descriptor that can be used to access the file.
+	 *
+	 * Note that create() can only be used to create files on disk; create() will
+	 * never return a file descriptor referring to a stream.
+	 *
+	 * Returns the new file descriptor, or -1 if an error occurred.
+	 * 
+	 * @param vaddr
+	 * @return the new file descriptor, or -1 if an error occurred
+	 * 
+	 */
 	private int handleCreate(int vaddr) {
-		if (vaddr < 0) {
-			Lib.debug(dbgProcess, "handleCreate:Invalid virtual address");
+		// Extract the file name
+		String fileName = readVirtualMemoryString(vaddr, MAX_STRLENGTH);
+		
+		// Return -1 if the file name is invalid or the list is full
+		int fileDescriptor = getAvailIndex();
+		if(fileName == null || fileDescriptor == -1 || fileDeleteList.contains(fileName)) {
 			return -1;
-		}
-		String fileName = readVirtualMemoryString(vaddr, 256);
-		if (fileName == null) {
-			Lib.debug(dbgProcess, "handleCreate:Read filename failed");
-			return -1;
-		}
-		int availableIndex = -1;
-		for (int i = 0; i < 16; i++) {
-			if (fileList[i] == null) {
-				availableIndex = i;
-				break;
-			}
-		}
-		if (availableIndex == -1) {
-			Lib.debug(dbgProcess, "handleCreate:Cannot create more than 16 files");
-			return -1;
-		} else {
-			OpenFile file = ThreadedKernel.fileSystem.open(fileName, true);
-			if (file == null) {
-				Lib.debug(dbgProcess, "handleCreate:Create failed");
-				return -1;
-			} else {
-				fileList[availableIndex] = file;
-				return availableIndex;
-			}
 		}
 
+		// Try creating the OpenFile
+		OpenFile file = UserKernel.fileSystem.open(fileName, true);
+		
+		// Return -1 if the file creation failed
+		if(file == null) {
+			return -1;
+		}
+		
+		// Insert the file in the fileList and return its file descriptor
+		fileList[fileDescriptor] = file;
+		return fileDescriptor;
 	}
 
+	/**
+	 * Attempt to open the named file and return a file descriptor.
+	 *
+	 * Note that open() can only be used to open files on disk; open() will never
+	 * return a file descriptor referring to a stream.
+	 *
+	 * Returns the new file descriptor, or -1 if an error occurred.
+	 * 
+	 * @param vaddr
+	 * @return the new file descriptor, or -1 if an error occurred.
+	 * 
+	 */
 	private int handleOpen(int vaddr) {
-		if (vaddr < 0) {
-			Lib.debug(dbgProcess, "handleOpen:Invalid virtual address");
-			return -1;
-		}
-		String fileName = readVirtualMemoryString(vaddr, 256);
-		if (fileName == null) {
-			Lib.debug(dbgProcess, "handleOpen:Read filename failed");
-			return -1;
+		// Extract the file name
+		String fileName = readVirtualMemoryString(vaddr, MAX_STRLENGTH);
 
-		}
-		int availableIndex = -1;
-		for (int i = 0; i < 16; i++) {
-			if (fileList[i] == null) {
-				availableIndex = i;
-				break;
-			}
-		}
-		if (availableIndex == -1) {
-			Lib.debug(dbgProcess, "handleOpen:Cannot create more than 16 files");
+		// Return -1 if the file name is invalid or the list is full
+		int fileDescriptor = getAvailIndex();
+		if(fileName == null || fileDescriptor == -1 || fileDeleteList.contains(fileName)) {
 			return -1;
-		} else {
-			OpenFile file = ThreadedKernel.fileSystem.open(fileName, false);
-			if (file == null) {
-				Lib.debug(dbgProcess, "handleOpen:Open failed");
-				return -1;
-			} else {
-				fileList[availableIndex] = file;
-				return availableIndex;
-			}
 		}
+
+		// Try creating the OpenFile
+		OpenFile file = UserKernel.fileSystem.open(fileName, false);
+
+		// Return -1 if the file creation failed
+		if(file == null) {
+			return -1;
+		}
+
+		// Insert the file in the fileList and return its file descriptor
+		fileList[fileDescriptor] = file;
+		return fileDescriptor;
 	}
-
-	private int handleRead(int descriptor, int bufferVAddr, int size) {
-		if (descriptor < 0 || descriptor > 15 || size < 0) {
+	
+	/**
+	 * Attempt to read up to size bytes into buffer from the file or stream
+	 * referred to by fileDescriptor.
+	 *
+	 * On success, the number of bytes read is returned. If the file descriptor
+	 * refers to a file on disk, the file position is advanced by this number.
+	 *
+	 * It is not necessarily an error if this number is smaller than the number of
+	 * bytes requested. If the file descriptor refers to a file on disk, this
+	 * indicates that the end of the file has been reached. If the file descriptor
+	 * refers to a stream, this indicates that the fewer bytes are actually
+	 * available right now than were requested, but more bytes may become available
+	 * in the future. Note that read() never waits for a stream to have more data;
+	 * it always returns as much as possible immediately.
+	 *
+	 * On error, -1 is returned, and the new file position is undefined. This can
+	 * happen if fileDescriptor is invalid, if part of the buffer is read-only or
+	 * invalid, or if a network stream has been terminated by the remote host and
+	 * no more data is available.
+	 * 
+	 * @param fileDescriptor
+	 * @param vaddr
+	 * @param size
+	 * @return On success, the number of bytes read is returned. On error, -1 is 
+	 * returned, and the new file position is undefined.
+	 * 
+	 */
+	private int handleRead(int fileDescriptor, int vaddr, int size) {
+		// Return -1 if the input is invalid
+		if(size < 0 || (fileDescriptor >= MAX_FILES || fileDescriptor < 0)
+				|| fileList[fileDescriptor] == null) {
 			return -1;
 		}
-		OpenFile file;
-
-		if (fileList[descriptor] == null) {
-			Lib.debug(dbgProcess, "handleRead:File doesn't exist in the descriptor table");
+		
+		// Read up to size bytes and save the number of bytes read
+		byte[] readBuffer = new byte[size];
+		int bytesRead;
+		if(fileDescriptor < 2) { // comment if error
+			bytesRead = fileList[fileDescriptor].read(readBuffer, 0, size); 
+		} // comment if error
+		else {	// comment if error
+			bytesRead = fileList[fileDescriptor].read(filePosList[fileDescriptor], readBuffer, 0, size); // comment if error
+		}	// comment if error
+		
+		// Return -1 if failed to read
+		if(bytesRead == -1 || bytesRead == 0) {
 			return -1;
-		} else {
-			file = fileList[descriptor];
 		}
-		int length = 0;
-		byte[] reader = new byte[size];
-		length = file.read(reader, 0, size);
-		if (length == -1) {
-			Lib.debug(dbgProcess, "handleRead:Error occurred when try to read file");
-			return -1;
-		}
-		int count = 0;
-		count = writeVirtualMemory(bufferVAddr, reader, 0, length);
-		return count;
-
+		
+		// Write the buffer into the virtual memory, update file position, and return bytes transferred
+		int bytesTransferred = writeVirtualMemory(vaddr, readBuffer, 0, bytesRead);
+		if(fileDescriptor >= 2) { // comment if error
+			filePosList[fileDescriptor] += bytesTransferred;	// comment if error
+		}	// comment if error
+		return bytesTransferred;
 	}
-
-	private int handleWrite(int descriptor, int bufferVAddr, int size) {
-		if (descriptor < 0 || descriptor > 15) {
-			Lib.debug(dbgProcess, "hanleWirte:Descriptor out of range");
+	
+	/**
+	 * Attempt to write up to count bytes from buffer to the file or stream
+	 * referred to by fileDescriptor. write() can return before the bytes are
+	 * actually flushed to the file or stream. A write to a stream can block,
+	 * however, if kernel queues are temporarily full.
+	 *
+	 * On success, the number of bytes written is returned (zero indicates nothing
+	 * was written), and the file position is advanced by this number. It IS an
+	 * error if this number is smaller than the number of bytes requested. For
+	 * disk files, this indicates that the disk is full. For streams, this
+	 * indicates the stream was terminated by the remote host before all the data
+	 * was transferred.
+	 *
+	 * On error, -1 is returned, and the new file position is undefined. This can
+	 * happen if fileDescriptor is invalid, if part of the buffer is invalid, or
+	 * if a network stream has already been terminated by the remote host.
+	 * 
+	 * @param fileDescriptor
+	 * @param vaddr
+	 * @param size
+	 * @return On success, the number of bytes written is returned (zero indicates nothing
+	 * was written), and the file position is advanced by this number. On error, -1 is 
+	 * returned, and the new file position is undefined.
+	 * 
+	 */
+	private int handleWrite(int fileDescriptor, int vaddr, int size) {
+		// Return -1 if the input is invalid
+		if(size < 0 || (fileDescriptor >= MAX_FILES || fileDescriptor < 0)
+				|| fileList[fileDescriptor] == null) {
 			return -1;
 		}
-		if (size < 0) {
-			Lib.debug(dbgProcess, "handleWrite:Size to write cannot be negative");
-			return -1;
-		}
-		OpenFile file;
-		if (fileList[descriptor] == null) {
-			Lib.debug(dbgProcess, "handleWrite:File doesn't exist in the descriptor table");
-			return -1;
-		} else {
-			file = fileList[descriptor];
-		}
-		int length = 0;
-		byte[] writer = new byte[size];
-		length = readVirtualMemory(bufferVAddr, writer, 0, size);
-		int count = 0;
-		count = file.write(writer, 0, length);
-		//System.out.println(size==count);
-		if (count == -1) {
-			Lib.debug(dbgProcess, "handleWrite:Error occur when read file");
-			return -1;
-		}
-		return count;
+		
+		// Count number of buffers to write
+		byte[] writeBuffer = new byte[size];
+		int bytesToWrite = readVirtualMemory(vaddr, writeBuffer, 0, size);
+		
+		// Write the file, update file position, and return number of bytes written
+		int bytesWritten;
+		if(fileDescriptor < 2) { // comment if error
+			bytesWritten =  fileList[fileDescriptor].write(writeBuffer, 0, bytesToWrite);
+		}	// comment if error
+		else {	// comment if error
+			bytesWritten =  fileList[fileDescriptor].write(filePosList[fileDescriptor], writeBuffer, 0, bytesToWrite);	// comment if error
+		}	// comment if error
+		if(fileDescriptor >= 2) {	// comment if error
+			filePosList[fileDescriptor] += (bytesWritten > 0) ? bytesWritten : 0;	// comment if error
+		}	// comment if error
+		return (bytesWritten < size && bytesWritten != 0) ? -1 : bytesWritten;	// comment if error
+		// return bytesWritten;	// uncomment if error
 	}
-
-	private int handleClose(int descriptor) {
-		if (descriptor < 0 || descriptor > 15) {
-			Lib.debug(dbgProcess, "handleClose:Descriptor out of range");
+	
+	/**
+	 * Close a file descriptor, so that it no longer refers to any file or stream
+	 * and may be reused.
+	 *
+	 * If the file descriptor refers to a file, all data written to it by write()
+	 * will be flushed to disk before close() returns.
+	 * If the file descriptor refers to a stream, all data written to it by write()
+	 * will eventually be flushed (unless the stream is terminated remotely), but
+	 * not necessarily before close() returns.
+	 *
+	 * The resources associated with the file descriptor are released. If the
+	 * descriptor is the last reference to a disk file which has been removed using
+	 * unlink, the file is deleted (this detail is handled by the file system
+	 * implementation).
+	 *
+	 * Returns 0 on success, or -1 if an error occurred.
+	 * 
+	 * @param fileDescriptor
+	 * @return 0 on success, or -1 if an error occurred.
+	 * 
+	 */
+	private int handleClose(int fileDescriptor) {
+		// Return -1 if the input is invalid
+		if((fileDescriptor >= MAX_FILES || fileDescriptor < 0)
+				|| fileList[fileDescriptor] == null) {
 			return -1;
 		}
-		if (fileList[descriptor] == null) {
-			Lib.debug(dbgProcess, "handleClose:File doesn't exist in the descriptor table");
-			return -1;
-		} else {
-			fileList[descriptor].close();
-			fileList[descriptor] = null;
-		}
-		return 0;
+		
+		// Close and remove the element from the list
+		String fileName = fileList[fileDescriptor].getName();
+		fileList[fileDescriptor].close();
+		fileList[fileDescriptor] = null;
+		filePosList[fileDescriptor] = 0;
+		
+		// Attempt to delete file if this file is unlinked
+		if(fileDeleteList.contains(fileName)) {	// comment if error
+			if(UserKernel.fileSystem.remove(fileName) == true) {	// comment if error
+				fileDeleteList.remove(fileName);	// comment if error
+				return 0;	// comment if error
+			}	// comment if error
+			else {
+				return -1;	// comment if error
+			}	// comment if error
+		}	// comment if error
+		
+		return 0;	// success
 	}
-
+	
+	/**
+	 * Delete a file from the file system. If no processes have the file open, the
+	 * file is deleted immediately and the space it was using is made available for
+	 * reuse.
+	 *
+	 * If any processes still have the file open, the file will remain in existence
+	 * until the last file descriptor referring to it is closed. However, creat()
+	 * and open() will not be able to return new file descriptors for the file
+	 * until it is deleted.
+	 *
+	 * Returns 0 on success, or -1 if an error occurred.
+	 * 
+	 * @param vaddr
+	 * @return 0 on success, or -1 if an error occurred.
+	 * 
+	 */
 	private int handleUnlink(int vaddr) {
-		if (vaddr < 0) {
-			Lib.debug(dbgProcess, "handleUnlink:Invalid virtual address");
+		// Extract the file name
+		String fileName = readVirtualMemoryString(vaddr, MAX_STRLENGTH);
+
+		// Return -1 if the file name is invalid
+		if(fileName == null) {
 			return -1;
 		}
-		String fileName = readVirtualMemoryString(vaddr, 256);
+		
+		// Search for index
+//		int fileDescriptor = searchFile(fileName);	// uncomment if error
+		
+//		// Return -1 if the file still exists in fileList	// uncomment if error
+//		if(fileDescriptor != -1) {	// uncomment if error
+//			return -1;	// uncomment if error
+//		}	// uncomment if error
+		
+		// Attempt to remove the file from the UserKernel's fileSystem
+		boolean removeSuccess = UserKernel.fileSystem.remove(fileName);
 
-		if (fileName == null) {
-			Lib.debug(dbgProcess, "handleUnlink:Read filename failed");
-			return -1;
-		}
-		OpenFile file;
-
-		int index = -1;
-
-		int j = 0;
-		while (j < 16) {
-			file = fileList[j];
-			if (file != null && file.getName().compareTo(fileName) == 0) {
-				index = j;
-				break;
-			}
-			j++;
-		}
-
-		if (index != -1) {
-			System.out.println("handleUnlink: File should be closed first");
-			return -1;
-		}
-
-		boolean didRemove = ThreadedKernel.fileSystem.remove(fileName);
-
-		if (!didRemove) {
-			System.out.println("handleUnlink:Remove failed");
-			return -1;
-		}
-
-		return 0;
-
+		// Just unlink if the file is being used by other processes
+		if(removeSuccess == false) {	// comment if error
+			fileDeleteList.add(fileName);	// comment if error
+			return -1;	// comment if error
+		}	// comment if error
+		
+		return 0;	// success	// comment if error
+		// return (removeSuccess == true) ? 0 : -1;	// uncomment if error
 	}
-
+	
+	
 	protected static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2, syscallJoin = 3, syscallCreate = 4,
 			syscallOpen = 5, syscallRead = 6, syscallWrite = 7, syscallClose = 8, syscallUnlink = 9;
 
@@ -1020,9 +1121,30 @@ public class UserProcess {
 		}
 	}
 
+	/** Array of files that UserProcess manipulates */
+	private OpenFile[] fileList;
 	private final int MAX_FILES = 16;
+	private final int MAX_STRLENGTH = 256;
+	private int[] filePosList;	// corresponding files
+	
+	/** HashSet of whether the file is to be deleted, not allowing creat or open */
+	private static HashSet<String> fileDeleteList;
+	
+	/** Get the next available index for fileList */
+	private int getAvailIndex() {
+		for(int i = 2; i < MAX_FILES; i++) {
+			if(fileList[i] == null) {
+				return i;
+			}
+		}
+		return -1;
+	}
+	
+	/** "enum" */
 	private final int STDINPUT = 0;
 	private final int STDOUTPUT = 1;
+	private final int ROOTPROCESS = 0;
+	
 	public static final int exceptionIllegalSyscall = 100;
 
 	/** The program being run by this process. */
@@ -1044,12 +1166,8 @@ public class UserProcess {
 
 	protected Lock lock1 = new Lock();
 
-	protected OpenFile[] fileList;
-
 	protected int processID;
 
-	protected OpenFile stdin;
-	protected OpenFile stdout;
 	//PART 3 VARIABLES
 	protected UserProcess parentProcess; //hold parent process
 	protected LinkedList<UserProcess> childProcesses; //maintain list of child processes
