@@ -47,19 +47,19 @@ public class UserKernel extends ThreadedKernel {
 	public void selfTest() {
 		super.selfTest();
 
-		System.out.println("Testing the readVirtualMemory with empty pageTable.");
-		System.out.println("Should return error or null");
+		//System.out.println("Testing the readVirtualMemory with empty pageTable.");
+		//System.out.println("Should return error or null");
 
-		UserProcess process = UserProcess.newUserProcess();
-		String test = process.readVirtualMemoryString(Machine.processor().readRegister(Machine.processor().regA0), 256);
-		System.out.println(test);
+		//UserProcess process = UserProcess.newUserProcess();
+		//String test = process.readVirtualMemoryString(Machine.processor().readRegister(Machine.processor().regA0), 256);
+		//System.out.println(test);
 
-		byte[] reader = new byte[Machine.processor().readRegister(Machine.processor().regA0)];
+		//byte[] reader = new byte[Machine.processor().readRegister(Machine.processor().regA0)];
 
-		process.numPages = pageTable.size();
+		//process.numPages = pageTable.size();
 
-		int test1 = process.writeVirtualMemory(Machine.processor().readRegister(Machine.processor().regA1), reader);
-		System.out.println(test1);
+		//int test1 = process.writeVirtualMemory(Machine.processor().readRegister(Machine.processor().regA1), reader);
+		//System.out.println(test1);
 
 	}
 
@@ -97,7 +97,6 @@ public class UserKernel extends ThreadedKernel {
 
 	public static int getPage() {
 		int pageNumber = -1;
-		// Lib.assertTrue(pageNumber < 0);
 
 		Machine.interrupt().disable();
 		if (pageTable.isEmpty() == false)
@@ -106,6 +105,7 @@ public class UserKernel extends ThreadedKernel {
 		return pageNumber;
 	}
 
+	//add a page to pageTable
 	public static void addAPage(int pageNum) {
 		Lib.assertTrue(pageNum >= 0 && pageNum < Machine.processor().getNumPhysPages());
 		Machine.interrupt().disable();
@@ -134,6 +134,7 @@ public class UserKernel extends ThreadedKernel {
 		KThread.currentThread().finish();
 	}
 
+	//delete the page from pageTable
 	public static boolean deletePage(int ppn) {
 		boolean value = false;
 

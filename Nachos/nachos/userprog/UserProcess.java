@@ -102,15 +102,20 @@ public class UserProcess {
 		LinkedList<TranslationEntry> allocated = new LinkedList<TranslationEntry>();
 
 		for (int i = 0; i < desiredPages; i++) {
+			//if virtual page number is longer than pageTable, return false
 			if (vpn >= pageTable.length)
 				return false;
+			//get the physical page number
 			int ppn = UserKernel.getPage();
+			//if free, add it to LinkedList and increase the number of pages already used and return true
 			if (ppn != -1) {
 				TranslationEntry a = new TranslationEntry(vpn + i, ppn, true, readOnly, false, false);
 				allocated.add(a);
 				pageTable[vpn + i] = a;
 				++numPages;
-			} else {
+			}
+			//if already allocated, delete the page and decrement the number of pages already used and return false
+			else {
 				for (TranslationEntry te : allocated) {
 					pageTable[te.vpn] = new TranslationEntry(te.vpn, 0, false, false, false, false);
 					UserKernel.deletePage(te.ppn);
@@ -185,31 +190,42 @@ public class UserProcess {
 	 * @return the number of bytes successfully transferred.
 	 */
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
-		System.out.println("readVM before assertion");
+		//make sure that offset and length are not negative values and they don't exceed length of array being stored to
 		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
-		System.out.println("readVM after assertion");
+		
+		//If there is nothing in pageTable, return null
+		if(numPages == 0) {
+			Lib.debug(dbgProcess,  "Read Virtual Memory: Empty pageTable");
+			return 0;
+		}
 
+		//store the array of main memory
 		byte[] memory = Machine.processor().getMemory();
 
+		//initialize the number of bytes transfered to 0 and the position of the last byte
 		int transfer = 0;
 		int end = vaddr + length - 1;
-
-		if (vaddr < 0 || end > Machine.processor().makeAddress(numPages - 1, pageSize - 1)) {// ||Machine.processor().pageFromAddress(vaddr) < 0) {
+		
+		//check if the first byte is non-negative or if the address of the page being read into is within the position of last byte
+		if (vaddr < 0 || end > Machine.processor().makeAddress(numPages - 1, pageSize - 1)) {
 			Lib.debug(dbgProcess, "Read Vritual Memory: Invalid Address");
 			return 0;
 		}
 
-		// for now, just assume that virtual addresses equal physical addresses
-
+		//start reading the memory
 		for (int i = Machine.processor().pageFromAddress(vaddr); i <= Machine.processor().pageFromAddress(end); i++) {
+			//break if the address is negative, exceeds the allowed range, empty, or referencing to invalid page
 			if ((i < 0 || i > pageTable.length) || pageTable == null || !pageTable[i].valid)
 				break;
-
+			
+			//store the address of byte currently being referenced
 			int startAddress = Machine.processor().makeAddress(i, 0);
+			//store the end address of byte currently being referenced
 			int endAddress = Machine.processor().makeAddress(i, pageSize - 1);
 			int amount = 0;
 			int addressOffset;
-
+			
+			//depending on the value of startAddress and endAddress compared to allowed area of memory, set the values
 			if (vaddr > startAddress && end < endAddress) {
 				addressOffset = vaddr - startAddress;
 				amount = length;
@@ -223,9 +239,11 @@ public class UserProcess {
 				addressOffset = 0;
 				amount = pageSize;
 			}
-
+			
+			//concatenate the physical address using the physical page number and address offset
 			int paddr = Machine.processor().makeAddress(pageTable[i].ppn, addressOffset);
 			System.arraycopy(memory, paddr, data, offset + transfer, amount);
+			//update teh amount being transfered
 			transfer += amount;
 		}
 
@@ -265,9 +283,11 @@ public class UserProcess {
 	 * @return the number of bytes successfully transferred.
 	 */
 	public int writeVirtualMemory(int vaddr, byte[] data, int offset, int length) {
-		System.out.println("Is this failing? (writeVM)");
 		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
-		System.out.println("Hello World");
+		if(numPages >= pageTable.length) {
+			Lib.debug(dbgProcess, "Write Virtual Memory: pageTable full");
+			return 0;
+		}
 
 		byte[] memory = Machine.processor().getMemory();
 
@@ -275,7 +295,7 @@ public class UserProcess {
 		int transfer = 0;
 
 		if (vaddr < 0 || end > Machine.processor().makeAddress(numPages - 1, pageSize - 1)) {// ||Machine.processor().pageFromAddress(vaddr) < 0) {
-			Lib.debug(dbgProcess, "Read Vritual Memory: Invalid Address");
+			Lib.debug(dbgProcess, "Write Vritual Memory: Invalid Address");
 			return 0;
 		}
 
