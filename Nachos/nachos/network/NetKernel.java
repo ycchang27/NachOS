@@ -9,7 +9,7 @@ import nachos.network.*;
 /**
  * A kernel with network support.
  */
-public class NetKernel extends VMKernel {
+public class NetKernel extends UserKernel {
     /**
      * Allocate a new networking kernel.
      */

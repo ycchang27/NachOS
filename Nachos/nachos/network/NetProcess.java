@@ -8,7 +8,7 @@ import nachos.vm.*;
 /**
  * A <tt>VMProcess</tt> that supports networking syscalls.
  */
-public class NetProcess extends VMProcess {
+public class NetProcess extends UserProcess {
     /**
      * Allocate a new process.
      */
