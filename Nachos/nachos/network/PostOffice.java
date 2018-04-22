@@ -15,6 +15,10 @@ import nachos.threads.*;
  * be done in the receive interrupt handler because each queue (implemented
  * with a <tt>SynchList</tt>) is protected by a lock.
  */
+/**
+ * @author Yun
+ * Update: Changed all private instances to protected (There is no privacy before Yun)
+ */
 public class PostOffice {
     /**
      * Allocate a new post office, using an array of <tt>SynchList</tt>s.
@@ -69,7 +73,7 @@ public class PostOffice {
     /**
      * Wait for incoming messages, and then put them in the correct mailbox.
      */
-    private void postalDelivery() {
+    protected void postalDelivery() {
 	while (true) {
 	    messageReceived.P();
 
@@ -97,7 +101,7 @@ public class PostOffice {
      * Called when a packet has arrived and can be dequeued from the network
      * link.
      */
-    private void receiveInterrupt() {
+    protected void receiveInterrupt() {
 	messageReceived.V();
     }
 
@@ -121,14 +125,14 @@ public class PostOffice {
      * network link. Note that this is called even if the previous packet was
      * dropped.
      */
-    private void sendInterrupt() {
+    protected void sendInterrupt() {
 	messageSent.V();
     }
 
-    private SynchList[] queues;
-    private Semaphore messageReceived;	// V'd when a message can be dequeued
-    private Semaphore messageSent;	// V'd when a message can be queued
-    private Lock sendLock;
+    protected SynchList[] queues;
+    protected Semaphore messageReceived;	// V'd when a message can be dequeued
+    protected Semaphore messageSent;	// V'd when a message can be queued
+    protected Lock sendLock;
 
-    private static final char dbgNet = 'n';
+    protected static final char dbgNet = 'n';
 }
