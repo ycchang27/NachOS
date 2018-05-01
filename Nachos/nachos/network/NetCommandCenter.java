@@ -1,8 +1,7 @@
 package nachos.network;
 
-import java.util.ArrayList;
+
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.TreeSet;
 
 import nachos.machine.*;
@@ -17,21 +16,8 @@ public class NetCommandCenter extends PostOffice {
 	public NetCommandCenter() {
 
 		// NetCommunicator variables
-		waitingConnections = new ArrayList<Connection>();
-		estabConnections = new LinkedList<Connection>();
+		connections = new ConnectionMap();
 		unackMessages = new HashSet<MailMessage>();
-
-		messageLock = new Lock();
-		portLock = new Lock();
-		threadLock = new Lock();
-		postalLock = new Lock();
-		resendLock = new Lock();
-		unackMessageLock = new Lock();
-		connectLock = new Lock();
-
-		resendCond = new Condition(resendLock);
-		postalCond = new Condition(postalLock);
-		connectCond = new Condition(connectLock);
 
 		availPorts = new TreeSet<Integer>();
 		for (int i = 0; i < MailMessage.portLimit; i++)
@@ -93,41 +79,135 @@ public class NetCommandCenter extends PostOffice {
 	 * like deadlock (2 Machines sent SYN Packet to each other)
 	 */
 	private void handleMessage(MailMessage mail) {
-		messageLock.acquire();	// entering critical section
+		// Get the connection state
+		int connectionState = connections.getConnectionState(mail.packet.dstLink, mail.dstPort);
 
+		// Handle specified port's all possible Connection states
+		switch(connectionState) {
+		case Connection.CLOSED:
+			handleClosed(mail);
+			break;
+		case Connection.SYN_SENT:
+			handleSYNSent(mail);
+			break;
+		case Connection.SYN_RCVD:
+			handleSYNRcvd(mail);
+			break;
+		case Connection.ESTABLISHED:
+			handleEstab(mail);
+			break;
+		case Connection.STP_SENT:
+			handleSTPSent(mail);
+			break;
+		case Connection.STP_RCVD:
+			handleSTPRcvd(mail);
+			break;
+		case Connection.CLOSING:
+			handleClosing(mail);
+			break;
+		default:
+			Lib.assertNotReached("Unsupported connection state in handleMessage(): " + connectionState);
+		}
+	}
+
+	/**
+	 * Handles how CLOSED connection handles the message
+	 */
+	private void handleClosed(MailMessage mail) {
 		// Extract tag bits from mail
 		int tag = extractTag(mail);
 
 		switch(tag) {
 		case SYN:
-			System.out.println("(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received"); // temp test print
-			Lib.debug(dbgNet, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received");
-			// Check for network deadlock
-//			if(waitingConnections.contains(new Connection(mail, SYN_SENT)))
-//				Lib.assertNotReached("Network deadlock detected at handlePacket()");
+			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received in CLOSED");
 
-			// No deadlock detected. Inserting to waiting list even if this connection has been
-			// established (There is a chance of SYN/ACK Packet drop). 
-			Lib.debug(dbgNet, "Inserting Connection["+new Connection(mail, SYN_RCVD)+"] to waitingConnections");
-			waitingConnections.add(new Connection(mail, SYN_RCVD));
+			// Inserting to waiting list until it's established (There is a chance of SYN/ACK Packet drop). 
+			Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to SYN_RCVD connections");
+			connections.add(new Connection(mail, Connection.SYN_RCVD));
+			break;
+
+		case FIN:
+			Lib.assertNotReached("FIN is not supported yet in handleClosed()");
+			break;
+		default:
+			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleClosed()" + tag);
+		}
+	}
+
+	/**
+	 * Handles how SYN_SENT connection handles the message. Also checks for deadlock.
+	 */
+	private void handleSYNSent(MailMessage mail) {
+		// Extract tag bits from mail
+		int tag = extractTag(mail);
+
+		switch(tag) {
+		case SYN:
+			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received in SYN_SENT");
+			Lib.assertNotReached("(Network" + Machine.networkLink().getLinkAddress() + "protocol deadlock");
 			break;
 
 		case SYNACK:
-			System.out.println("(Network" + Machine.networkLink().getLinkAddress() + ") SYNACK packet is received"); // temp test print
-			Lib.debug(dbgNet, "(Network" + Machine.networkLink().getLinkAddress() + ") SYNACK packet is received");
+			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYNACK packet is received in SYN_SENT");
+
 			// Connection is confirmed. Establishing connection
-			if(!hasConnection(new Connection(mail, ESTABLISHED))) {
-				Lib.debug(dbgNet, "Inserting Connection["+new Connection(mail, SYN_RCVD)+"] to estabConnections");
-				estabConnections.add(new Connection(mail, ESTABLISHED));
-			}
+			Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to ESTABLISHED connections");
+			connections.switchConnection(Connection.ESTABLISHED, new Connection(mail, Connection.SYN_SENT));
 			break;
 
 		default:
-			Lib.assertNotReached("Unsupported invalid Packet tag bits in handlePacket()");
+			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleSYNSent()");
 		}
-
-		messageLock.release();	// exiting critical section
 	}
+
+	/**
+	 * Handles how SYN_RCVD connection handles the message
+	 */
+	private void handleSYNRcvd(MailMessage mail) {
+		//Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") handleSYNRcvd doesn't do anything");
+	}
+
+	/**
+	 * Handles how ESTABLISHED connection handles the message
+	 */
+	private void handleEstab(MailMessage mail) {
+		// Extract tag bits from mail
+		int tag = extractTag(mail);
+
+		switch(tag) {
+		case SYN:
+			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received in ESTABLISHED");
+
+			// Inserting to waiting list until it's established (There is a chance of SYN/ACK Packet drop). 
+			Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to SYN_RCVD connections");
+			connections.add(new Connection(mail, Connection.SYN_RCVD));
+			break;
+		default:
+			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleEstab()");
+		}
+	}
+
+	/**
+	 * Handles how STP_SENT connection handles the message
+	 */
+	private void handleSTPSent(MailMessage mail) {
+		Lib.assertNotReached("Not ready to support STP_SENT state");
+	}
+
+	/**
+	 * Handles how STP_RCVD connection handles the message
+	 */
+	private void handleSTPRcvd(MailMessage mail) {
+		Lib.assertNotReached("Not ready to support STP_RCVD state");
+	}
+
+	/**
+	 * Handles how CLOSING connection handles the message
+	 */
+	private void handleClosing(MailMessage mail) {
+		Lib.assertNotReached("Not ready to support CLOSING state");
+	}
+
 
 	/**
 	 * Extracts tag components in Packet.
@@ -142,16 +222,15 @@ public class NetCommandCenter extends PostOffice {
 	 * has occurred.
 	 */
 	public int connect(int dstLink, int dstPort) {
-		portLock.acquire();	// entering critical section
-
+		Lock lock = new Lock();
 		// Find an available port and pop it out of the available port list
+		lock.acquire();
 		if(availPorts.isEmpty())
 			return -1;
 		int srcPort = availPorts.first();
 		availPorts.remove(availPorts.first());
-
-		portLock.release();	// exiting critical section
-
+		lock.release();
+		
 		try {
 			// Send SYN Packet
 			int srcLink = Machine.networkLink().getLinkAddress();
@@ -167,33 +246,34 @@ public class NetCommandCenter extends PostOffice {
 			send(synMail);
 
 			// Insert into resend list
-			unackMessageLock.acquire();	// entering critical section
+			lock.acquire();
 			unackMessages.add(synMail);
-			unackMessageLock.release();	// exiting critical section
-
-			// Keep resending until SYN/ACK Packet is arrived
+			lock.release();
+			
+			// Goto "SYN_SENT" state
 			Connection connection = new Connection(
 					srcLink, 
 					dstLink, 
 					srcPort,
 					dstPort,
-					ESTABLISHED);
-			Lib.debug(dbgNet, "Waiting for Connection["+connection+"]");
-			while(!hasConnection(connection)) {
+					Connection.SYN_SENT);
+			connections.add(connection);
+			
+			// Keep resending until the connection is established
+			Lib.debug(dbgConn, "Waiting for Connection["+connection+"]");
+			while(!isEstablished(connection))
 				NetKernel.alarm.waitUntil(RETRANSMIT_INTERVAL);
-				if(!estabConnections.isEmpty())
-					Lib.debug(dbgNet, "Something is inside estabConnections");
-			}
+			
 			// Connection is established. Removing the message from resend list
-			unackMessageLock.acquire();	// entering critical section
+			lock.acquire();
 			unackMessages.remove(synMail);
-			unackMessageLock.release();	// exiting critical section
+			lock.release();
 		}
 		catch (MalformedPacketException e) {
 			Lib.assertNotReached("Packet is null at connect()");
 			// continue;
 		}
-		System.out.println("Connect finished"); // temp test print
+		Lib.debug(dbgConn, "Connection finished");
 		return srcPort;
 	}
 
@@ -202,7 +282,7 @@ public class NetCommandCenter extends PostOffice {
 	 */
 	public int accept(int srcPort) {
 		// Get the next waiting connection if exists
-		Connection connectMe = findWaitingConnection(srcPort);
+		Connection connectMe = connections.findWaitingConnection(Machine.networkLink().getLinkAddress(), srcPort);
 		if(connectMe == null)
 			return -1;
 
@@ -222,30 +302,15 @@ public class NetCommandCenter extends PostOffice {
 			send(synackMail);
 
 			// Establish connection.
-			messageLock.acquire();	// entering critical section
-			estabConnections.add(connectMe);
-			messageLock.release();	// exiting critical section
+			connectMe.state = Connection.ESTABLISHED;
+			connections.add(connectMe);
 		}
 		catch (MalformedPacketException e) {
 			Lib.assertNotReached("Packet is null at accept()");
 			// continue;
 		}
-		Lib.debug(dbgNet, "Accept finished");
-		System.out.println("Accept finished"); // temp test print
+		Lib.debug(dbgConn, "Accept finished");
 		return 0;
-	}
-
-	/**
-	 * Find a port's waiting connection if exists. Returns null if not found
-	 */
-	private Connection findWaitingConnection(int srcPort) {
-		// Find a connection that matches srcPort
-		for(Connection c : waitingConnections) {
-			if(c.srcPort == srcPort) {
-				return c;
-			}
-		}
-		return null;
 	}
 
 	/**
@@ -253,89 +318,41 @@ public class NetCommandCenter extends PostOffice {
 	 */
 	private void resendAll() {
 		while(true) {
+			Lock lock = new Lock();
+			lock.acquire();
+			
 			for(MailMessage m : unackMessages)
 				send(m);
+			
+			lock.release();
 			NetKernel.alarm.waitUntil(RETRANSMIT_INTERVAL);
 		}
 	}
-	
+
 	/**
-	 * Check whether the given connection exists in estabConnections
+	 * Check whether the given connection is established (in ESTABLISHED state)
 	 */
-	private boolean hasConnection(Connection findMe) {
-		for(Connection c : estabConnections) {
-			if(c.equals(findMe)) {
-				return true;
-			}
-		}
-		return false;
+	private boolean isEstablished(Connection findMe) {
+		return Connection.ESTABLISHED == connections.getConnectionState(findMe.srcLink, findMe.srcPort);
 	}
 
-	// Helper class
-	/**
-	 * Contains all connection related info, including addresses, ports, and its status
-	 */
-	private class Connection {
-		public int srcLink, dstLink;
-		public int srcPort, dstPort;
-		public int status;
-
-		public Connection(int srcLink, int dstLink, int srcPort, int dstPort, int status) {
-			this.srcLink = srcLink;
-			this.dstLink = dstLink;
-			this.srcPort = srcPort;
-			this.dstPort = dstPort;
-			this.status = status;
-		}
-
-		/**
-		 * Takes in mail as the main argument. mail is assumed to be the message that
-		 * was received, not sent, so Links and Ports are reversed.
-		 */
-		public Connection(MailMessage mail, int status) {
-			srcLink = mail.packet.dstLink; 
-			dstLink = mail.packet.srcLink;
-			srcPort = mail.dstPort;
-			dstPort = mail.srcPort;
-			this.status = status;
-		}
-		
-		@Override
-		public boolean equals(Object o) {
-			Connection c = (Connection) o;
-			return (srcLink == c.srcLink && dstLink == c.dstLink && srcPort == c.srcPort
-					&& dstPort == c.dstPort) || (srcLink == c.dstLink && dstLink == c.srcLink
-					&& srcPort == c.dstPort && dstPort == c.srcPort);
-		}
-		
-		@Override
-		public String toString() {
-			return "("+srcLink+","+srcPort+") -> ("+dstLink+","+dstPort+")";
-		}
-		
-	}
 
 	// Packet tag bits
-	private static final int SYN = 1, SYNACK = 3;
+	private static final int SYN = 1, ACK = 2, SYNACK = 3, STP = 4, FIN = 8, FINACK = 10;
 
 	// Packet contents index
 	private static final int MBZ = 0, MBZ_TAGS = 1;
 
-	// Connection state
-	private static final int SYN_SENT = 0, SYN_RCVD = 1, ESTABLISHED = 2;
+	// Connection Map
+	ConnectionMap connections;
 
 	// Other constants
-	private static final int RETRANSMIT_INTERVAL = 2000000;
+	private static final int RETRANSMIT_INTERVAL = 20000;
 
 	// Data structures
-	private ArrayList<Connection> waitingConnections;
-	private LinkedList<Connection> estabConnections;
+	private static final char dbgConn = 'c';
 	private HashSet<MailMessage> unackMessages;
 	private TreeSet<Integer> availPorts;
 
 	// Locks and conditions
-	private Lock messageLock, portLock, threadLock, unackMessageLock, connectLock, postalLock, resendLock;
-	private Condition connectCond;
-	private Condition postalCond;
-	private Condition resendCond;
 }
