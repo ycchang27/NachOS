@@ -35,70 +35,74 @@ public class NetKernel extends UserKernel {
 	 */
 	public void selfTest() {
 		super.selfTest();
-
-//		KThread serverThread = new KThread(new Runnable() {
-//			public void run() { pingServer(); }
-//		});
-//
-//		serverThread.fork();
-//
-//		System.out.println("Press any key to start the network test...");
-//		console.readByte(true);
-//
-//		int local = Machine.networkLink().getLinkAddress();
-//
-//		// ping this machine first
-//		ping(local);
-//
-//		// if we're 0 or 1, ping the opposite
-//		if (local <= 1)
-//			ping(1-local);
-		
-//		int hostID = Machine.networkLink().getLinkAddress();
-//		NetCommandCenter ncc = new NetCommandCenter();
-//		System.out.println("Press any key to start the network test...");
-//		console.readByte(true);
-//		if(hostID == 0)
-//			ncc.connect(0, 1);
-//		else {
-//			while(true)ncc.accept(0);
-//		}
 		
 		// stalling to prepare other machines to run
 		System.out.println("Press any key to start the network test...");
 		console.readByte(true);
 		
-		int local = Machine.networkLink().getLinkAddress();
-		
-		// send syn packet if network 0
-		if(local == 0) {
-//			MailMessage synMail;
-//			try {
-//				byte[] contents = new byte[2];
-//				contents[0] = 0;
-//				contents[1] = 1;
-//				synMail = new MailMessage(
-//						1, 
-//						0, 
-//						local, 
-//						0,
-//						contents);
-//			}
-//			catch (MalformedPacketException e) {
-//				Lib.assertNotReached();
-//				return;
-//			}
-//
-//			postOffice.send(synMail);
-			ncc.connect(1, 1);
-		}
-		// send synack packet if network 1 and syn packet is detected 
-		else {
-			ncc.accept(1);
-		}
-		Machine.halt();
+//		int local = Machine.networkLink().getLinkAddress();
+//		
+//		// send syn packet if network 0
+//		if(local == 0) {
+//			ncc.connect(1, 1);
+//		}
+//		// send synack packet if network 1 and syn packet is detected 
+//		else {
+//			ncc.accept(1);
+//		}
+//		Machine.halt();
 	}
 
+	/**
+	 * Start running user programs.
+	 */
+	public void run() {
+		//super.run();
+		int local = Machine.networkLink().getLinkAddress();
+		
+		if(local == 0) {
+			NetProcess process = NetProcess.newNetProcess();
+
+			String shellProgram = "client.coff";
+
+			// pass arguments for coff files here!!
+			String[] arguments = { "1", "15" };
+			Lib.assertTrue(process.execute(shellProgram, arguments));
+
+			KThread.currentThread().finish();
+		}
+//		else if(local == 1) {
+//			NetProcess process = NetProcess.newNetProcess();
+//
+//			String shellProgram = "client.coff";
+//
+//			// pass arguments for coff files here!!
+//			String[] arguments = { "2", "0" };
+//			Lib.assertTrue(process.execute(shellProgram, arguments));
+//
+//			KThread.currentThread().finish();
+//		}
+		else {
+			NetProcess process = NetProcess.newNetProcess();
+
+			String shellProgram = "host.coff";
+
+			// pass arguments for coff files here!!
+			String[] arguments = { "15" };
+			Lib.assertTrue(process.execute(shellProgram, arguments));
+
+			KThread.currentThread().finish();
+		}
+	}
+
+	/**
+	 * Terminate this kernel. Never returns.
+	 */
+	public void terminate() {
+		super.terminate();
+	}
+
+	/*
 	private void ping(int dstLink) {
 		int srcLink = Machine.networkLink().getLinkAddress();
 
@@ -146,21 +150,7 @@ public class NetKernel extends UserKernel {
 			postOffice.send(ack);
 		}	
 	}
-
-	/**
-	 * Start running user programs.
-	 */
-	public void run() {
-		super.run();
-	}
-
-	/**
-	 * Terminate this kernel. Never returns.
-	 */
-	public void terminate() {
-		super.terminate();
-	}
-
+	*/
 	// variables for selfTest
 	private PostOffice postOffice;
 	private NetCommandCenter ncc;

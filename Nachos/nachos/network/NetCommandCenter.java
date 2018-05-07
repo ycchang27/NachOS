@@ -1,7 +1,11 @@
 package nachos.network;
 
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.TreeSet;
 
 import nachos.machine.*;
@@ -18,11 +22,13 @@ public class NetCommandCenter extends PostOffice {
 		// NetCommunicator variables
 		connections = new ConnectionMap();
 		unackMessages = new HashSet<MailMessage>();
-
+		waitingDataMessages = new Deque[MailMessage.portLimit];
 		availPorts = new TreeSet<Integer>();
-		for (int i = 0; i < MailMessage.portLimit; i++)
+		for (int i = 0; i < MailMessage.portLimit; i++) {
 			availPorts.add(i);
-
+			waitingDataMessages[i] = new LinkedList<MailMessage>();
+		}
+		
 		// PostOffice variables
 		messageReceived = new Semaphore(0);
 		messageSent = new Semaphore(0);
@@ -171,6 +177,8 @@ public class NetCommandCenter extends PostOffice {
 	 * Handles how ESTABLISHED connection handles the message
 	 */
 	private void handleEstab(MailMessage mail) {
+		Lock lock = new Lock();
+		
 		// Extract tag bits from mail
 		int tag = extractTag(mail);
 
@@ -178,10 +186,33 @@ public class NetCommandCenter extends PostOffice {
 		case SYN:
 			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received in ESTABLISHED");
 
-			// Inserting to waiting list until it's established (There is a chance of SYN/ACK Packet drop). 
-			Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to SYN_RCVD connections");
-			connections.add(new Connection(mail, Connection.SYN_RCVD));
+			// Insert to waiting list until it's established (There is a chance of SYN/ACK Packet drop). 
+			if(!isEstablished(new Connection(mail, Connection.SYN_RCVD))) {
+				Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to SYN_RCVD connections");
+				connections.add(new Connection(mail, Connection.SYN_RCVD));
+			}
+			else {
+				Lib.debug(dbgConn, "Connection["+new Connection(mail, Connection.SYN_RCVD)+"] already exists");
+			}
 			break;
+		case DATA:
+			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") DATA packet is received in ESTABLISHED");
+			
+			// Add to the waiting data message list
+			Lib.debug(dbgConn, "Inserting contents at (" + Machine.networkLink().getLinkAddress() + ", " + mail.dstPort + ")");
+			waitingDataMessages[mail.dstPort].add(mail);
+			break;
+			
+		case ACK:
+			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") ACK packet is received in ESTABLISHED");
+			
+			mail.contents[MBZ_TAGS] = DATA;
+			try {
+				unackMessages.remove(new MailMessage(Machine.networkLink().getLinkAddress(), mail.srcPort, mail.packet.dstLink, mail.dstPort, mail.contents));
+			}
+			catch(MalformedPacketException e) {
+				// continue;
+			}
 		default:
 			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleEstab()");
 		}
@@ -218,16 +249,16 @@ public class NetCommandCenter extends PostOffice {
 	}
 
 	/**
-	 * Connects to a remote/local host. Returns the chosen available port  or -1 if error
-	 * has occurred.
+	 * Connects to a remote/local host. Returns the corresponding connection
+	 * or null if error occurs
 	 */
-	public int connect(int dstLink, int dstPort) {
+	public Connection connect(int dstLink, int dstPort) {
 		Lock lock = new Lock();
 		// Find an available port and pop it out of the available port list
 		lock.acquire();
 		if(availPorts.isEmpty())
-			return -1;
-		int srcPort = availPorts.first();
+			return null;
+		int srcPort = 1;// availPorts.first();
 		availPorts.remove(availPorts.first());
 		lock.release();
 		
@@ -268,23 +299,27 @@ public class NetCommandCenter extends PostOffice {
 			lock.acquire();
 			unackMessages.remove(synMail);
 			lock.release();
+			
+			System.out.println("Connection finished");
+			Lib.debug(dbgConn, "Connection finished");
+			connection.state = Connection.ESTABLISHED;
+			return connection;
 		}
 		catch (MalformedPacketException e) {
 			Lib.assertNotReached("Packet is null at connect()");
 			// continue;
 		}
-		Lib.debug(dbgConn, "Connection finished");
-		return srcPort;
+		return null;
 	}
 
 	/**
 	 * Accepts a waiting connection of the particular port. Return 0 if success or -1 if failure.
 	 */
-	public int accept(int srcPort) {
+	public Connection accept(int srcPort) {
 		// Get the next waiting connection if exists
 		Connection connectMe = connections.findWaitingConnection(Machine.networkLink().getLinkAddress(), srcPort);
 		if(connectMe == null)
-			return -1;
+			return null;
 
 		// Send SYN/ACK Packet
 		Lib.debug(dbgNet, "Accepting Connection["+connectMe+"]");
@@ -304,13 +339,135 @@ public class NetCommandCenter extends PostOffice {
 			// Establish connection.
 			connectMe.state = Connection.ESTABLISHED;
 			connections.add(connectMe);
+			
+			Lib.debug(dbgConn, "Accept finished");
+			return connectMe;
 		}
 		catch (MalformedPacketException e) {
 			Lib.assertNotReached("Packet is null at accept()");
 			// continue;
 		}
-		Lib.debug(dbgConn, "Accept finished");
-		return 0;
+		return null;
+	}
+	
+	/**
+	 * Sends data packet(s) depending on the size
+	 * 
+	 * @param c - current connection
+	 * @param contents - bytes to send
+	 * @param size - size of the contents
+	 * @param bytesSent - bytes that have been sent so far
+	 * @return updated bytesSent
+	 */
+	public int sendData(Connection c, byte[] contents, int size, int bytesSent) {
+		Lib.assertTrue(size >= 0);
+		
+		// Keep sending until all bytes are sent
+		Lock lock = new Lock();
+		System.out.println("contents size = " + contents.length);
+		System.out.println("size = " + size);
+		int i = 0, length, contentSize = MailMessage.maxContentsLength-2, offset=0;
+		if(size > contentSize) {
+			for(i = 0; i*contentSize < size; i ++) {
+				// Setup content array
+				length = contentSize;
+				byte[] dataToSend = new byte[length];
+				System.arraycopy(contents, i, dataToSend, 0, length);
+				
+				// Generate sequence number
+				offset += length;
+				byte[] sendMe = createData(offset+bytesSent, dataToSend);
+				
+				// Send the packet
+				try {
+					MailMessage dataMessage = new MailMessage(
+							c.dstLink,  
+							c.dstPort, 
+							c.srcLink,
+							c.srcPort,
+							sendMe);
+					send(dataMessage);
+					
+					// Also insert into the resendList
+					lock.acquire();
+					unackMessages.add(dataMessage);
+					lock.release();
+				}
+				catch(MalformedPacketException e) {
+					Lib.assertNotReached("MailMessage is failed at sendData()");
+				}
+			}
+			if(size - i*contentSize > 0) {
+				// Setup content array
+				length = size - i*contentSize;
+				byte[] dataToSend = new byte[length];
+				System.arraycopy(contents, i, dataToSend, 0, length);
+				
+				// Generate sequence number
+				offset += length;
+				byte[] sendMe = createData(offset+bytesSent, dataToSend);
+
+				// Send the packet
+				try {
+					MailMessage dataMessage = new MailMessage(
+							c.dstLink,  
+							c.dstPort, 
+							c.srcLink,
+							c.srcPort,
+							sendMe);
+					send(dataMessage);
+					
+					// Also insert into the resendList
+					lock.acquire();
+					unackMessages.add(dataMessage);
+					lock.release();
+				}
+				catch(MalformedPacketException e) {
+					Lib.assertNotReached("MailMessage is failed at sendData()");
+				}
+			}
+		}
+		else {
+			// Setup content array
+			length = size;
+			byte[] dataToSend = new byte[length];
+			System.arraycopy(contents, i, dataToSend, 0, length);
+			
+			// Generate sequence number
+			offset += length;
+			byte[] sendMe = createData(offset+bytesSent, dataToSend);
+
+			// Send the packet
+			try {
+				MailMessage dataMessage = new MailMessage(
+						c.dstLink,  
+						c.dstPort, 
+						c.srcLink,
+						c.srcPort,
+						sendMe);
+				send(dataMessage);
+				
+				// Also insert into the resendList
+				lock.acquire();
+				unackMessages.add(dataMessage);
+				lock.release();
+			}
+			catch(MalformedPacketException e) {
+				Lib.assertNotReached("MailMessage is failed at sendData()");
+			}
+		}
+		
+		return bytesSent + offset;
+	}
+	
+	/**
+	 * Receives a data packet
+	 */
+	public byte[] receiveData(Connection c) {
+		if(!waitingDataMessages[c.srcPort].isEmpty()) {
+			//System.out.println("Something is inside at " + c.dstPort);
+		}
+		return (waitingDataMessages[c.srcPort].isEmpty()) ? null : waitingDataMessages[c.srcPort].removeFirst().contents;
 	}
 
 	/**
@@ -335,13 +492,42 @@ public class NetCommandCenter extends PostOffice {
 	private boolean isEstablished(Connection findMe) {
 		return Connection.ESTABLISHED == connections.getConnectionState(findMe.srcLink, findMe.srcPort);
 	}
+	
+	/**
+	 * Create a context array that contains both sequence number and data
+	 */
+	public byte[] createData(int seq, byte[] data) {
+		Lib.assertTrue(seq >= 0 && data.length + 4 <= MailMessage.maxContentsLength);
+		
+		// Create a content array
+		byte[] contents = new byte[4+data.length];
+
+		// Insert sequence number
+		System.arraycopy(ByteBuffer.allocate(4).putInt(seq).array(), 0, contents, 0, 4);
+		
+		// Insert String
+		System.arraycopy(data, 0, contents, 4, data.length);
+		
+		return contents;
+	}
+	
+	/**
+	 * Extract sequence number from message
+	 */
+	public int extractSeq(MailMessage mail) {
+		Lib.debug(dbgConn, "Mail["+mail+"] has sequence number of " + ByteBuffer.wrap(mail.contents).order(ByteOrder.LITTLE_ENDIAN).getInt());
+		return ByteBuffer.wrap(mail.contents).order(ByteOrder.LITTLE_ENDIAN).getInt();
+	}
 
 
 	// Packet tag bits
-	private static final int SYN = 1, ACK = 2, SYNACK = 3, STP = 4, FIN = 8, FINACK = 10;
+	private static final int DATA = 0, SYN = 1, ACK = 2, SYNACK = 3, STP = 4, FIN = 8, FINACK = 10;
 
 	// Packet contents index
 	private static final int MBZ = 0, MBZ_TAGS = 1;
+	
+	// contents headers
+	private static final int HEADERS = 4;
 
 	// Connection Map
 	ConnectionMap connections;
@@ -353,6 +539,7 @@ public class NetCommandCenter extends PostOffice {
 	private static final char dbgConn = 'c';
 	private HashSet<MailMessage> unackMessages;
 	private TreeSet<Integer> availPorts;
+	private Deque<MailMessage>[] waitingDataMessages;
 
 	// Locks and conditions
 }

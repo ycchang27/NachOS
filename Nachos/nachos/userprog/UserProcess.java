@@ -1122,16 +1122,16 @@ public class UserProcess {
 	}
 
 	/** Array of files that UserProcess manipulates */
-	private OpenFile[] fileList;
+	protected OpenFile[] fileList;
 	private final int MAX_FILES = 16;
 	private final int MAX_STRLENGTH = 256;
-	private int[] filePosList;	// corresponding files
+	protected int[] filePosList;	// corresponding files
 	
 	/** HashSet of whether the file is to be deleted, not allowing creat or open */
 	private static HashSet<String> fileDeleteList;
 	
 	/** Get the next available index for fileList */
-	private int getAvailIndex() {
+	protected int getAvailIndex() {
 		for(int i = 2; i < MAX_FILES; i++) {
 			if(fileList[i] == null) {
 				return i;
@@ -1141,8 +1141,8 @@ public class UserProcess {
 	}
 	
 	/** "enum" */
-	private final int STDINPUT = 0;
-	private final int STDOUTPUT = 1;
+	protected final int STDINPUT = 0;
+	protected final int STDOUTPUT = 1;
 	private final int ROOTPROCESS = 0;
 	
 	public static final int exceptionIllegalSyscall = 100;

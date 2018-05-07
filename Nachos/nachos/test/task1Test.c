@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "stdio.h"
+#include "stdlib.h"
 
 #define MAXOPENFILES 14
 
@@ -142,6 +143,7 @@ void read_writeTest() {
   }
   do {
     transferred = read(readFD, buffer, count);
+    printf("%s",buffer);
   } while(write(writeFD, buffer, transferred) > 0);
   printf("Finished reading and writing! Check out %s and output for sanity check\n", readFileName);
 

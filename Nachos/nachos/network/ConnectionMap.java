@@ -25,7 +25,7 @@ public class ConnectionMap {
 	}
 	
 	/**
-	 * Add the specified connection to the map. Wake up a waiting thread.
+	 * Add the specified connection to the map.
 	 * 
 	 * @param	c	the connection to add. Must not be <tt>null</tt>.
 	 */
