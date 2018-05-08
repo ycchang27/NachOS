@@ -86,7 +86,7 @@ public class NetCommandCenter extends PostOffice {
 	 */
 	private void handleMessage(MailMessage mail) {
 		// Get the connection state
-		int connectionState = connections.getConnectionState(mail.packet.dstLink, mail.dstPort);
+		int connectionState = connections.getConnectionState(mail.packet.srcLink, mail.srcPort, mail.packet.dstLink, mail.dstPort);
 
 		// Handle specified port's all possible Connection states
 		switch(connectionState) {
@@ -196,11 +196,25 @@ public class NetCommandCenter extends PostOffice {
 			}
 			break;
 		case DATA:
-			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") DATA packet is received in ESTABLISHED");
+			//Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") DATA packet is received in ESTABLISHED");
 			
 			// Add to the waiting data message list
-			Lib.debug(dbgConn, "Inserting contents at (" + Machine.networkLink().getLinkAddress() + ", " + mail.dstPort + ")");
+			//Lib.debug(dbgConn, "Inserting contents at (" + Machine.networkLink().getLinkAddress() + ", " + mail.dstPort + ")");
 			waitingDataMessages[mail.dstPort].add(mail);
+			mail.contents[MBZ_TAGS] = ACK;
+			// Send ACK Packet
+			try {
+				MailMessage ack = new MailMessage(
+						mail.packet.srcLink,
+						mail.srcPort,
+						mail.packet.dstLink,
+						mail.dstPort,
+						mail.contents);
+				send(ack);
+			}
+			catch(MalformedPacketException e) {
+				// continue;
+			}
 			break;
 			
 		case ACK:
@@ -208,11 +222,12 @@ public class NetCommandCenter extends PostOffice {
 			
 			mail.contents[MBZ_TAGS] = DATA;
 			try {
-				unackMessages.remove(new MailMessage(Machine.networkLink().getLinkAddress(), mail.srcPort, mail.packet.dstLink, mail.dstPort, mail.contents));
+				unackMessages.remove(new MailMessage(mail.packet.srcLink, mail.srcPort, mail.packet.dstLink, mail.dstPort, mail.contents));
 			}
 			catch(MalformedPacketException e) {
 				// continue;
 			}
+			break;
 		default:
 			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleEstab()");
 		}
@@ -300,8 +315,8 @@ public class NetCommandCenter extends PostOffice {
 			unackMessages.remove(synMail);
 			lock.release();
 			
-			System.out.println("Connection finished");
-			Lib.debug(dbgConn, "Connection finished");
+//			System.out.println("Connection finished");
+			Lib.debug(dbgConn, "Connection["+connection+"] finished");
 			connection.state = Connection.ESTABLISHED;
 			return connection;
 		}
@@ -322,7 +337,7 @@ public class NetCommandCenter extends PostOffice {
 			return null;
 
 		// Send SYN/ACK Packet
-		Lib.debug(dbgNet, "Accepting Connection["+connectMe+"]");
+		Lib.debug(dbgConn, "Accepting Connection["+connectMe+"]");
 		int srcLink = Machine.networkLink().getLinkAddress();
 		byte[] contents = new byte[2];
 		contents[MBZ] = 0;
@@ -340,7 +355,7 @@ public class NetCommandCenter extends PostOffice {
 			connectMe.state = Connection.ESTABLISHED;
 			connections.add(connectMe);
 			
-			Lib.debug(dbgConn, "Accept finished");
+			Lib.debug(dbgConn, "Accepted Connection["+connectMe+"]");
 			return connectMe;
 		}
 		catch (MalformedPacketException e) {
@@ -364,100 +379,120 @@ public class NetCommandCenter extends PostOffice {
 		
 		// Keep sending until all bytes are sent
 		Lock lock = new Lock();
-		System.out.println("contents size = " + contents.length);
-		System.out.println("size = " + size);
-		int i = 0, length, contentSize = MailMessage.maxContentsLength-2, offset=0;
-		if(size > contentSize) {
-			for(i = 0; i*contentSize < size; i ++) {
-				// Setup content array
-				length = contentSize;
-				byte[] dataToSend = new byte[length];
-				System.arraycopy(contents, i, dataToSend, 0, length);
-				
-				// Generate sequence number
-				offset += length;
-				byte[] sendMe = createData(offset+bytesSent, dataToSend);
-				
-				// Send the packet
-				try {
-					MailMessage dataMessage = new MailMessage(
-							c.dstLink,  
-							c.dstPort, 
-							c.srcLink,
-							c.srcPort,
-							sendMe);
-					send(dataMessage);
-					
-					// Also insert into the resendList
-					lock.acquire();
-					unackMessages.add(dataMessage);
-					lock.release();
-				}
-				catch(MalformedPacketException e) {
-					Lib.assertNotReached("MailMessage is failed at sendData()");
-				}
-			}
-			if(size - i*contentSize > 0) {
-				// Setup content array
-				length = size - i*contentSize;
-				byte[] dataToSend = new byte[length];
-				System.arraycopy(contents, i, dataToSend, 0, length);
-				
-				// Generate sequence number
-				offset += length;
-				byte[] sendMe = createData(offset+bytesSent, dataToSend);
-
-				// Send the packet
-				try {
-					MailMessage dataMessage = new MailMessage(
-							c.dstLink,  
-							c.dstPort, 
-							c.srcLink,
-							c.srcPort,
-							sendMe);
-					send(dataMessage);
-					
-					// Also insert into the resendList
-					lock.acquire();
-					unackMessages.add(dataMessage);
-					lock.release();
-				}
-				catch(MalformedPacketException e) {
-					Lib.assertNotReached("MailMessage is failed at sendData()");
-				}
-			}
-		}
-		else {
-			// Setup content array
-			length = size;
-			byte[] dataToSend = new byte[length];
-			System.arraycopy(contents, i, dataToSend, 0, length);
+		int i = 0, length, contentSize = CONTENTS, offset=0;
+		
+		// Send the packet
+		try {
+			byte[] sendMe = createData(size, contents);
+			MailMessage dataMessage = new MailMessage(
+					c.dstLink,  
+					c.dstPort, 
+					c.srcLink,
+					c.srcPort,
+					sendMe);
+			send(dataMessage);
 			
-			// Generate sequence number
-			offset += length;
-			byte[] sendMe = createData(offset+bytesSent, dataToSend);
-
-			// Send the packet
-			try {
-				MailMessage dataMessage = new MailMessage(
-						c.dstLink,  
-						c.dstPort, 
-						c.srcLink,
-						c.srcPort,
-						sendMe);
-				send(dataMessage);
-				
-				// Also insert into the resendList
-				lock.acquire();
-				unackMessages.add(dataMessage);
-				lock.release();
-			}
-			catch(MalformedPacketException e) {
-				Lib.assertNotReached("MailMessage is failed at sendData()");
-			}
+			// Also insert into the resendList
+			lock.acquire();
+			unackMessages.add(dataMessage);
+			lock.release();
+		}
+		catch(MalformedPacketException e) {
+			Lib.assertNotReached("MailMessage is failed at sendData()");
 		}
 		
 		return bytesSent + offset;
+//		if(size > contentSize) {
+//			for(i = 0; i*contentSize < size; i ++) {
+//				// Setup content array
+//				length = contentSize;
+//				byte[] dataToSend = new byte[length];
+//				System.arraycopy(contents, i, dataToSend, 0, length);
+//				
+//				// Generate sequence number
+//				offset += length;
+//				byte[] sendMe = createData(offset+bytesSent, dataToSend);
+//				
+//				// Send the packet
+//				try {
+//					MailMessage dataMessage = new MailMessage(
+//							c.dstLink,  
+//							c.dstPort, 
+//							c.srcLink,
+//							c.srcPort,
+//							sendMe);
+//					send(dataMessage);
+//					
+//					// Also insert into the resendList
+//					lock.acquire();
+//					unackMessages.add(dataMessage);
+//					lock.release();
+//				}
+//				catch(MalformedPacketException e) {
+//					Lib.assertNotReached("MailMessage is failed at sendData()");
+//				}
+//			}
+//			if(size - i*contentSize > 0) {
+//				// Setup content array
+//				length = size - i*contentSize;
+//				byte[] dataToSend = new byte[length];
+//				System.arraycopy(contents, i, dataToSend, 0, length);
+//				
+//				// Generate sequence number
+//				offset += length;
+//				byte[] sendMe = createData(offset+bytesSent, dataToSend);
+//
+//				// Send the packet
+//				try {
+//					MailMessage dataMessage = new MailMessage(
+//							c.dstLink,  
+//							c.dstPort, 
+//							c.srcLink,
+//							c.srcPort,
+//							sendMe);
+//					send(dataMessage);
+//					
+//					// Also insert into the resendList
+//					lock.acquire();
+//					unackMessages.add(dataMessage);
+//					lock.release();
+//				}
+//				catch(MalformedPacketException e) {
+//					Lib.assertNotReached("MailMessage is failed at sendData()");
+//				}
+//			}
+//		}
+//		else {
+//			// Setup content array
+//			length = size;
+//			byte[] dataToSend = new byte[length];
+//			System.arraycopy(contents, i, dataToSend, 0, length);
+//			
+//			// Generate sequence number
+//			offset += length;
+//			byte[] sendMe = createData(offset+bytesSent, dataToSend);
+//
+//			// Send the packet
+//			try {
+//				MailMessage dataMessage = new MailMessage(
+//						c.dstLink,  
+//						c.dstPort, 
+//						c.srcLink,
+//						c.srcPort,
+//						sendMe);
+//				send(dataMessage);
+//				
+//				// Also insert into the resendList
+//				lock.acquire();
+//				unackMessages.add(dataMessage);
+//				lock.release();
+//			}
+//			catch(MalformedPacketException e) {
+//				Lib.assertNotReached("MailMessage is failed at sendData()");
+//			}
+//		}
+		
+//		return bytesSent + offset;
 	}
 	
 	/**
@@ -490,44 +525,74 @@ public class NetCommandCenter extends PostOffice {
 	 * Check whether the given connection is established (in ESTABLISHED state)
 	 */
 	private boolean isEstablished(Connection findMe) {
-		return Connection.ESTABLISHED == connections.getConnectionState(findMe.srcLink, findMe.srcPort);
+		return Connection.ESTABLISHED == connections.getConnectionState(findMe.dstLink, findMe.dstPort, findMe.srcLink, findMe.srcPort);
 	}
 	
 	/**
-	 * Create a context array that contains both sequence number and data
+	 * Create a content array that contains both sequence number and data
 	 */
 	public byte[] createData(int seq, byte[] data) {
-		Lib.assertTrue(seq >= 0 && data.length + 4 <= MailMessage.maxContentsLength);
+		Lib.assertTrue(seq >= 0 && data.length <= CONTENTS);
 		
 		// Create a content array
-		byte[] contents = new byte[4+data.length];
-
-		// Insert sequence number
-		System.arraycopy(ByteBuffer.allocate(4).putInt(seq).array(), 0, contents, 0, 4);
+		byte[] contents = new byte[HEADERS+SEQNUM+data.length];
+		contents[MBZ] = 0;
+		contents[MBZ_TAGS] = DATA;
 		
-		// Insert String
-		System.arraycopy(data, 0, contents, 4, data.length);
+		// Insert sequence number
+		System.arraycopy(ByteBuffer.allocate(SEQNUM).putInt(seq).array(), 0, contents, HEADERS, SEQNUM);
+		
+		// Insert data
+		System.arraycopy(data, 0, contents, HEADERS+SEQNUM, data.length);
+		
+//		// test
+//		System.out.println("data: " + new String(data));
+//		System.out.println("Contents: " + new String(contents));
+//		byte[] temp = new byte[SEQNUM];
+//		System.arraycopy(contents, HEADERS, temp, 0, SEQNUM);
+//		System.out.println("seq #: " + ByteBuffer.wrap(temp).order(ByteOrder.BIG_ENDIAN).getInt());
 		
 		return contents;
 	}
 	
 	/**
-	 * Extract sequence number from message
+	 * Extract sequence number from mail message (DATA only)
 	 */
 	public int extractSeq(MailMessage mail) {
-		Lib.debug(dbgConn, "Mail["+mail+"] has sequence number of " + ByteBuffer.wrap(mail.contents).order(ByteOrder.LITTLE_ENDIAN).getInt());
-		return ByteBuffer.wrap(mail.contents).order(ByteOrder.LITTLE_ENDIAN).getInt();
+		byte[] seq = new byte[SEQNUM];
+		System.arraycopy(mail.contents, HEADERS, seq, 0, SEQNUM);
+		Lib.debug(dbgConn, "Mail["+mail+"] has sequence number of " + ByteBuffer.wrap(seq).order(ByteOrder.BIG_ENDIAN).getInt());
+		return ByteBuffer.wrap(seq).order(ByteOrder.BIG_ENDIAN).getInt();
+	}
+	
+	/**
+	 * Extract sequence number from MailMessage content array (DATA only)
+	 */
+	public int extractSeq(byte[] contents) {
+		byte[] seq = new byte[SEQNUM];
+		System.arraycopy(contents, HEADERS, seq, 0, SEQNUM);
+		return ByteBuffer.wrap(seq).order(ByteOrder.BIG_ENDIAN).getInt();
+	}
+	
+	/**
+	 * Extract buffer from MailMessage content array (DATA only)
+	 */
+	public byte[] extractBuffer(byte[] contents) {
+		if(contents == null)
+			return null;
+		byte[] buffer = new byte[contents.length-HEADERS-SEQNUM];
+		System.arraycopy(contents, HEADERS+SEQNUM, buffer, 0, buffer.length);
+		return buffer;
 	}
 
-
-	// Packet tag bits
+	// MailMessage tag bits
 	private static final int DATA = 0, SYN = 1, ACK = 2, SYNACK = 3, STP = 4, FIN = 8, FINACK = 10;
 
-	// Packet contents index
+	// MailMessage contents index
 	private static final int MBZ = 0, MBZ_TAGS = 1;
 	
-	// contents headers
-	private static final int HEADERS = 4;
+	// MailMessage contents headers [MBZ][MBZ_TAG][SEQNUM][CONTENTS]
+	private static final int HEADERS = 2, SEQNUM = 4, CONTENTS = MailMessage.maxContentsLength - HEADERS - SEQNUM;
 
 	// Connection Map
 	ConnectionMap connections;

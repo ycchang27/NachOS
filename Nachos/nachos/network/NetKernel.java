@@ -66,29 +66,29 @@ public class NetKernel extends UserKernel {
 			String shellProgram = "client.coff";
 
 			// pass arguments for coff files here!!
-			String[] arguments = { "1", "15" };
+			String[] arguments = { "2", "15", "Tired...", ""+"Tired...".length()};
 			Lib.assertTrue(process.execute(shellProgram, arguments));
 
 			KThread.currentThread().finish();
 		}
-//		else if(local == 1) {
-//			NetProcess process = NetProcess.newNetProcess();
-//
-//			String shellProgram = "client.coff";
-//
-//			// pass arguments for coff files here!!
-//			String[] arguments = { "2", "0" };
-//			Lib.assertTrue(process.execute(shellProgram, arguments));
-//
-//			KThread.currentThread().finish();
-//		}
+		else if(local == 1) {
+			NetProcess process = NetProcess.newNetProcess();
+
+			String shellProgram = "client.coff";
+
+			// pass arguments for coff files here!!
+			String[] arguments = { "2", "15", "I am", ""+"I am".length() };
+			Lib.assertTrue(process.execute(shellProgram, arguments));
+
+			KThread.currentThread().finish();
+		}
 		else {
 			NetProcess process = NetProcess.newNetProcess();
 
 			String shellProgram = "host.coff";
 
 			// pass arguments for coff files here!!
-			String[] arguments = { "15" };
+			String[] arguments = { "15", ""+"Tired...".length(), ""+"I am".length() };
 			Lib.assertTrue(process.execute(shellProgram, arguments));
 
 			KThread.currentThread().finish();

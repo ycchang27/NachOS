@@ -20,6 +20,8 @@ public class NetProcess extends UserProcess {
 		super();
 		netManager = new NetCommandCenter();
 		socketList = new Socket[MAX_SOCKETS];
+		//lock = new Lock();
+		read = new Semaphore(0);
 	}
 	
 	/**
@@ -140,11 +142,12 @@ public class NetProcess extends UserProcess {
 	 * 
 	 */
 	private int handleRead(int fileDescriptor, int vaddr, int size) {
-		Lock lock = new Lock();
-		lock.acquire();
+		//Lock lock = new Lock();
+		boolean intStatus = Machine.interrupt().disable(); // calling ready() requires interrupts disabled
 		//System.out.println("read");
 		// Input statement
 		if(fileDescriptor == STDINPUT || fileDescriptor == STDOUTPUT) {
+			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return super.handleSyscall(syscallRead, fileDescriptor, vaddr, size, 0);
 		}
 		
@@ -152,6 +155,7 @@ public class NetProcess extends UserProcess {
 		if(size < 0 || (fileDescriptor >= MAX_SOCKETS || fileDescriptor < 0)
 				|| socketList[fileDescriptor] == null) {
 			//System.out.println("Invalid arguments");
+			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return -1;
 		}
 		
@@ -181,11 +185,12 @@ public class NetProcess extends UserProcess {
 //			// Write into the memory
 //			bytesRead += writeVirtualMemory(vaddr, readBuffer, 0, readBuffer.length);
 //		}
-		byte[] readBuffer = netManager.receiveData(socketList[fileDescriptor].connection);
+		byte[] readBuffer = netManager.extractBuffer(netManager.receiveData(socketList[fileDescriptor].connection));
 		if(readBuffer != null) {
 			//System.out.println("buffer isn't null");
-			//System.out.println(new String(readBuffer, 0));
+			//System.out.println(new String(readBuffer));
 			bytesRead +=fileList[STDOUTPUT].write(readBuffer, 0, readBuffer.length); 
+			//bytesRead +=fileList[STDINPUT].write(readBuffer, 0, readBuffer.length); 
 			//bytesRead += writeVirtualMemory(vaddr, readBuffer, 0, readBuffer.length);
 		}
 		// Receive buffers from data packets
@@ -221,7 +226,8 @@ public class NetProcess extends UserProcess {
 		
 		// Update the number of bytes read
 		socketList[fileDescriptor].bytesRead += bytesRead;
-		lock.release();
+//		lock.release();
+		Machine.interrupt().restore(intStatus); // re-enable interrupts
 		return bytesRead;
 	}
 	
@@ -251,14 +257,17 @@ public class NetProcess extends UserProcess {
 	 * 
 	 */
 	private int handleWrite(int fileDescriptor, int vaddr, int size) {
+		boolean intStatus = Machine.interrupt().disable(); // calling ready() requires interrupts disabled
 		// Input statement
 		if(fileDescriptor == STDINPUT || fileDescriptor == STDOUTPUT) {
+			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return super.handleSyscall(syscallWrite, fileDescriptor, vaddr, size, 0);
 		}
 		
 		// Return -1 if the input is invalid
 		if(size < 0 || (fileDescriptor >= MAX_SOCKETS || fileDescriptor < 0)
 				|| socketList[fileDescriptor] == null) {
+			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return -1;
 		}
 		
@@ -270,7 +279,7 @@ public class NetProcess extends UserProcess {
 		socketList[fileDescriptor].bytesSent += bytesToSend;
 		socketList[fileDescriptor].bytesSent = netManager.sendData(socketList[fileDescriptor].connection, writeBuffer, 
 				bytesToSend, socketList[fileDescriptor].bytesSent);
-		
+		Machine.interrupt().restore(intStatus); // re-enable interrupts
 		return bytesToSend;
 	}
 	
@@ -289,6 +298,9 @@ public class NetProcess extends UserProcess {
 	private static final int
 	syscallConnect = 11,
 	syscallAccept = 12;
+	
+	Lock lock;
+	Semaphore read;
 
 	private NetCommandCenter netManager;
 	private final int MAX_SOCKETS = 16;

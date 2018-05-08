@@ -182,7 +182,7 @@ public class ConnectionMap {
      * @param	srcPort	source port
      * @return	state of the connection (CLOSED if not found)
      */
-    public int getConnectionState(int srcLink, int srcPort) {
+    public int getConnectionState(int dstLink, int dstPort, int srcLink, int srcPort) {
     	Lock lock = new Lock();
     	lock.acquire();
     	
@@ -191,7 +191,7 @@ public class ConnectionMap {
     		// Search through all connections
     		for(Connection c : map.get(connectionState))
     			// Return the connection state if the connection is found
-    			if(c.srcLink == srcLink && c.srcPort == srcPort)
+    			if(c.srcLink == srcLink && c.srcPort == srcPort && c.dstLink == dstLink && c.dstPort == dstPort)
     				return connectionState;
     	
     	// Connection doesn't exist. Conclude as closed
