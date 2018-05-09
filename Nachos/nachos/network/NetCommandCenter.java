@@ -28,8 +28,12 @@ public class NetCommandCenter extends PostOffice {
 			availPorts.add(i);
 			waitingDataMessages[i] = new LinkedList<MailMessage>();
 		}
+		KThread ra = new KThread(new Runnable() {
+			public void run() { resendAll(); }
+		});
 		
-		// PostOffice variables
+		
+		// PostOffice variables (Reinitializing variables)
 		messageReceived = new Semaphore(0);
 		messageSent = new Semaphore(0);
 		sendLock = new Lock();
@@ -46,17 +50,17 @@ public class NetCommandCenter extends PostOffice {
 		KThread pd = new KThread(new Runnable() {
 			public void run() { postalDelivery(); }
 		});
-		KThread ra = new KThread(new Runnable() {
-			public void run() { resendAll(); }
-		});
-		pd.fork();
+		
+		// This automates postalDelivery(), which handles MailMessage receiving
+		// procedures, and resendAll(), which handles resending unACKed MailMessages
 		ra.fork();
+		pd.fork();
 		Lib.debug(dbgNet, "Constructor finished");
 	}
 
 	/**
 	 * Modified version of PostOffice's postalDelivery(). Instead of inserting 
-	 * arrived message at the queue, it calls a helper method, handlePacket(),
+	 * arrived message at the SynchList, it calls a helper method, handlePacket(),
 	 * to insert it into the correct data structure.
 	 */
 	protected void postalDelivery() {
@@ -70,7 +74,7 @@ public class NetCommandCenter extends PostOffice {
 				MailMessage mail = new MailMessage(p);
 				Lib.debug(dbgNet, "receiving mail: " + mail);
 
-				// The arrival was successful. Calling the helper method to handle Packet
+				// The arrival was successful. Calling the helper method to handle MailMessage
 				handleMessage(mail);
 			}
 			catch (MalformedPacketException e) {
@@ -81,8 +85,8 @@ public class NetCommandCenter extends PostOffice {
 	}
 
 	/**
-	 * Inserts Packet into the correct data structure. Also checks for potential errors
-	 * like deadlock (2 Machines sent SYN Packet to each other)
+	 * Look for the MailMessage's corresponding Connection state and calls the relevant function.
+	 * If no Connection found, then it's treated as CLOSED.
 	 */
 	private void handleMessage(MailMessage mail) {
 		// Get the connection state
@@ -126,17 +130,15 @@ public class NetCommandCenter extends PostOffice {
 		switch(tag) {
 		case SYN:
 			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received in CLOSED");
-
-			// Inserting to waiting list until it's established (There is a chance of SYN/ACK Packet drop). 
+			// Insert a new Connection(SYN_RCVD or waiting state)
 			Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to SYN_RCVD connections");
 			connections.add(new Connection(mail, Connection.SYN_RCVD));
 			break;
-
 		case FIN:
-			Lib.assertNotReached("FIN is not supported yet in handleClosed()");
+			Lib.assertNotReached("FIN is not supported yet in handleClosed()");	// FIN is not implemented yet
 			break;
 		default:
-			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleClosed()" + tag);
+			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleClosed()" + tag);	// protocol error
 		}
 	}
 
@@ -149,20 +151,30 @@ public class NetCommandCenter extends PostOffice {
 
 		switch(tag) {
 		case SYN:
+			// protocol error
 			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYN packet is received in SYN_SENT");
 			Lib.assertNotReached("(Network" + Machine.networkLink().getLinkAddress() + "protocol deadlock");
 			break;
 
 		case SYNACK:
 			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") SYNACK packet is received in SYN_SENT");
-
-			// Connection is confirmed. Establishing connection
+			// Connection is confirmed. Change SYN_SENT state to ESTABLISHED (this will stop the "blocking" state for connect
+			// function
 			Lib.debug(dbgConn, "Inserting Connection["+new Connection(mail, Connection.SYN_RCVD)+"] to ESTABLISHED connections");
 			connections.switchConnection(Connection.ESTABLISHED, new Connection(mail, Connection.SYN_SENT));
 			break;
-
+		
+			// Do nothing or print error for the following
+		case DATA:
+			break;
+			
+		case STP:
+			break;
+			
+		case FIN:
+			break;
 		default:
-			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleSYNSent()");
+			Lib.assertNotReached("Unsupported invalid Packet tag bits in handleSYNSent()");	// protocol error
 		}
 	}
 
@@ -170,15 +182,13 @@ public class NetCommandCenter extends PostOffice {
 	 * Handles how SYN_RCVD connection handles the message
 	 */
 	private void handleSYNRcvd(MailMessage mail) {
-		//Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") handleSYNRcvd doesn't do anything");
+		// Do nothing
 	}
 
 	/**
 	 * Handles how ESTABLISHED connection handles the message
 	 */
 	private void handleEstab(MailMessage mail) {
-		Lock lock = new Lock();
-		
 		// Extract tag bits from mail
 		int tag = extractTag(mail);
 
@@ -196,12 +206,10 @@ public class NetCommandCenter extends PostOffice {
 			}
 			break;
 		case DATA:
-			//Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") DATA packet is received in ESTABLISHED");
-			
-			// Add to the waiting data message list
-			//Lib.debug(dbgConn, "Inserting contents at (" + Machine.networkLink().getLinkAddress() + ", " + mail.dstPort + ")");
+			// Add to the waiting data message list (this will be used when NetProcess is trying to read)
 			waitingDataMessages[mail.dstPort].add(mail);
 			mail.contents[MBZ_TAGS] = ACK;
+			
 			// Send ACK Packet
 			try {
 				MailMessage ack = new MailMessage(
@@ -220,6 +228,7 @@ public class NetCommandCenter extends PostOffice {
 		case ACK:
 			Lib.debug(dbgConn, "(Network" + Machine.networkLink().getLinkAddress() + ") ACK packet is received in ESTABLISHED");
 			
+			// Remove the mail from the resend list (or "shifting" if window protocol was implemented)
 			mail.contents[MBZ_TAGS] = DATA;
 			try {
 				unackMessages.remove(new MailMessage(mail.packet.srcLink, mail.srcPort, mail.packet.dstLink, mail.dstPort, mail.contents));
@@ -237,6 +246,7 @@ public class NetCommandCenter extends PostOffice {
 	 * Handles how STP_SENT connection handles the message
 	 */
 	private void handleSTPSent(MailMessage mail) {
+		// not supported yet
 		Lib.assertNotReached("Not ready to support STP_SENT state");
 	}
 
@@ -244,6 +254,7 @@ public class NetCommandCenter extends PostOffice {
 	 * Handles how STP_RCVD connection handles the message
 	 */
 	private void handleSTPRcvd(MailMessage mail) {
+		// not supported yet
 		Lib.assertNotReached("Not ready to support STP_RCVD state");
 	}
 
@@ -256,11 +267,10 @@ public class NetCommandCenter extends PostOffice {
 
 
 	/**
-	 * Extracts tag components in Packet.
+	 * Extracts tag components in MailMessage.
 	 */
 	private int extractTag(MailMessage mail) {
-		byte tag = mail.contents[MBZ_TAGS];
-		return tag;
+		return mail.contents[MBZ_TAGS];
 	}
 
 	/**
@@ -268,33 +278,36 @@ public class NetCommandCenter extends PostOffice {
 	 * or null if error occurs
 	 */
 	public Connection connect(int dstLink, int dstPort) {
-		Lock lock = new Lock();
 		// Find an available port and pop it out of the available port list
-		lock.acquire();
 		if(availPorts.isEmpty())
 			return null;
-		int srcPort = 1;// availPorts.first();
+		
+		// source port
+		int srcPort = availPorts.first();
 		availPorts.remove(availPorts.first());
-		lock.release();
 		
 		try {
-			// Send SYN Packet
+			// source address
 			int srcLink = Machine.networkLink().getLinkAddress();
+			
+			// Tag specifications
 			byte[] contents = new byte[2];
 			contents[MBZ] = 0;
 			contents[MBZ_TAGS] = SYN;
+			
+			// Prepare MailMessage
 			MailMessage synMail = new MailMessage(
 					dstLink, 
 					dstPort, 
 					srcLink, 
 					srcPort,
 					contents);
+			
+			// Send SYN MailMessage
 			send(synMail);
 
-			// Insert into resend list
-			lock.acquire();
+			// Insert SYN MailMessage into resend list
 			unackMessages.add(synMail);
-			lock.release();
 			
 			// Goto "SYN_SENT" state
 			Connection connection = new Connection(
@@ -303,19 +316,19 @@ public class NetCommandCenter extends PostOffice {
 					srcPort,
 					dstPort,
 					Connection.SYN_SENT);
+			
+			// Insert the Connection to the map
 			connections.add(connection);
 			
-			// Keep resending until the connection is established
 			Lib.debug(dbgConn, "Waiting for Connection["+connection+"]");
+			// Wait until the connection is established (Triggered in SYN_SENT's SYNACK)
 			while(!isEstablished(connection))
 				NetKernel.alarm.waitUntil(RETRANSMIT_INTERVAL);
 			
 			// Connection is established. Removing the message from resend list
-			lock.acquire();
 			unackMessages.remove(synMail);
-			lock.release();
 			
-//			System.out.println("Connection finished");
+			// Return the established Connection
 			Lib.debug(dbgConn, "Connection["+connection+"] finished");
 			connection.state = Connection.ESTABLISHED;
 			return connection;
@@ -328,33 +341,43 @@ public class NetCommandCenter extends PostOffice {
 	}
 
 	/**
-	 * Accepts a waiting connection of the particular port. Return 0 if success or -1 if failure.
+	 * Accepts a waiting connection of the particular port. Returns the corresponding connection
+	 * or null if error occurs
 	 */
 	public Connection accept(int srcPort) {
-		// Get the next waiting connection if exists
+		// Get the next waiting Connection (or SYN_RCVD Connection) if exists
 		Connection connectMe = connections.findWaitingConnection(Machine.networkLink().getLinkAddress(), srcPort);
+		
+		// Return null if not found
 		if(connectMe == null)
 			return null;
 
-		// Send SYN/ACK Packet
 		Lib.debug(dbgConn, "Accepting Connection["+connectMe+"]");
+		
+		// Source address
 		int srcLink = Machine.networkLink().getLinkAddress();
+		
+		// Tag specifications
 		byte[] contents = new byte[2];
 		contents[MBZ] = 0;
 		contents[MBZ_TAGS] = SYNACK;
 		try {
+			// Prepare MailMessage
 			MailMessage synackMail = new MailMessage(
 					connectMe.dstLink,  
 					connectMe.dstPort, 
 					srcLink,
 					srcPort,
 					contents);
+			
+			// Send SYN/ACK Packet
 			send(synackMail);
 
-			// Establish connection.
+			// Establish connection and insert into the map
 			connectMe.state = Connection.ESTABLISHED;
 			connections.add(connectMe);
 			
+			// Return the Connection
 			Lib.debug(dbgConn, "Accepted Connection["+connectMe+"]");
 			return connectMe;
 		}
@@ -362,24 +385,26 @@ public class NetCommandCenter extends PostOffice {
 			Lib.assertNotReached("Packet is null at accept()");
 			// continue;
 		}
+		
+		// Accept failed
 		return null;
 	}
 	
 	/**
-	 * Sends data packet(s) depending on the size
+	 * Sends data packet(s) depending on the size. For now, it sends only 1 packet,
+	 * so this only sends up to the contents.length
 	 * 
 	 * @param c - current connection
 	 * @param contents - bytes to send
 	 * @param size - size of the contents
 	 * @param bytesSent - bytes that have been sent so far
-	 * @return updated bytesSent
+	 * @return updated bytesSent (not updated for the current version)
 	 */
 	public int sendData(Connection c, byte[] contents, int size, int bytesSent) {
 		Lib.assertTrue(size >= 0);
 		
 		// Keep sending until all bytes are sent
 		Lock lock = new Lock();
-		int i = 0, length, contentSize = CONTENTS, offset=0;
 		
 		// Send the packet
 		try {
@@ -401,112 +426,19 @@ public class NetCommandCenter extends PostOffice {
 			Lib.assertNotReached("MailMessage is failed at sendData()");
 		}
 		
-		return bytesSent + offset;
-//		if(size > contentSize) {
-//			for(i = 0; i*contentSize < size; i ++) {
-//				// Setup content array
-//				length = contentSize;
-//				byte[] dataToSend = new byte[length];
-//				System.arraycopy(contents, i, dataToSend, 0, length);
-//				
-//				// Generate sequence number
-//				offset += length;
-//				byte[] sendMe = createData(offset+bytesSent, dataToSend);
-//				
-//				// Send the packet
-//				try {
-//					MailMessage dataMessage = new MailMessage(
-//							c.dstLink,  
-//							c.dstPort, 
-//							c.srcLink,
-//							c.srcPort,
-//							sendMe);
-//					send(dataMessage);
-//					
-//					// Also insert into the resendList
-//					lock.acquire();
-//					unackMessages.add(dataMessage);
-//					lock.release();
-//				}
-//				catch(MalformedPacketException e) {
-//					Lib.assertNotReached("MailMessage is failed at sendData()");
-//				}
-//			}
-//			if(size - i*contentSize > 0) {
-//				// Setup content array
-//				length = size - i*contentSize;
-//				byte[] dataToSend = new byte[length];
-//				System.arraycopy(contents, i, dataToSend, 0, length);
-//				
-//				// Generate sequence number
-//				offset += length;
-//				byte[] sendMe = createData(offset+bytesSent, dataToSend);
-//
-//				// Send the packet
-//				try {
-//					MailMessage dataMessage = new MailMessage(
-//							c.dstLink,  
-//							c.dstPort, 
-//							c.srcLink,
-//							c.srcPort,
-//							sendMe);
-//					send(dataMessage);
-//					
-//					// Also insert into the resendList
-//					lock.acquire();
-//					unackMessages.add(dataMessage);
-//					lock.release();
-//				}
-//				catch(MalformedPacketException e) {
-//					Lib.assertNotReached("MailMessage is failed at sendData()");
-//				}
-//			}
-//		}
-//		else {
-//			// Setup content array
-//			length = size;
-//			byte[] dataToSend = new byte[length];
-//			System.arraycopy(contents, i, dataToSend, 0, length);
-//			
-//			// Generate sequence number
-//			offset += length;
-//			byte[] sendMe = createData(offset+bytesSent, dataToSend);
-//
-//			// Send the packet
-//			try {
-//				MailMessage dataMessage = new MailMessage(
-//						c.dstLink,  
-//						c.dstPort, 
-//						c.srcLink,
-//						c.srcPort,
-//						sendMe);
-//				send(dataMessage);
-//				
-//				// Also insert into the resendList
-//				lock.acquire();
-//				unackMessages.add(dataMessage);
-//				lock.release();
-//			}
-//			catch(MalformedPacketException e) {
-//				Lib.assertNotReached("MailMessage is failed at sendData()");
-//			}
-//		}
-		
-//		return bytesSent + offset;
+		return bytesSent;
 	}
 	
 	/**
-	 * Receives a data packet
+	 * Receives a data MailMessage's byte contents if exists. Returns null if not.
 	 */
 	public byte[] receiveData(Connection c) {
-		if(!waitingDataMessages[c.srcPort].isEmpty()) {
-			//System.out.println("Something is inside at " + c.dstPort);
-		}
 		return (waitingDataMessages[c.srcPort].isEmpty()) ? null : waitingDataMessages[c.srcPort].removeFirst().contents;
 	}
 
 	/**
-	 * Resends all packets that are yet to be recognized.
+	 * Resends all packets that are yet to be ACKed. This function will be keep running
+	 * in a thread
 	 */
 	private void resendAll() {
 		while(true) {
@@ -522,7 +454,7 @@ public class NetCommandCenter extends PostOffice {
 	}
 
 	/**
-	 * Check whether the given connection is established (in ESTABLISHED state)
+	 * Check whether the given connection is established (in ESTABLISHED state) in the map
 	 */
 	private boolean isEstablished(Connection findMe) {
 		return Connection.ESTABLISHED == connections.getConnectionState(findMe.dstLink, findMe.dstPort, findMe.srcLink, findMe.srcPort);
@@ -536,6 +468,8 @@ public class NetCommandCenter extends PostOffice {
 		
 		// Create a content array
 		byte[] contents = new byte[HEADERS+SEQNUM+data.length];
+		
+		// tag specifications
 		contents[MBZ] = 0;
 		contents[MBZ_TAGS] = DATA;
 		
@@ -545,18 +479,11 @@ public class NetCommandCenter extends PostOffice {
 		// Insert data
 		System.arraycopy(data, 0, contents, HEADERS+SEQNUM, data.length);
 		
-//		// test
-//		System.out.println("data: " + new String(data));
-//		System.out.println("Contents: " + new String(contents));
-//		byte[] temp = new byte[SEQNUM];
-//		System.arraycopy(contents, HEADERS, temp, 0, SEQNUM);
-//		System.out.println("seq #: " + ByteBuffer.wrap(temp).order(ByteOrder.BIG_ENDIAN).getInt());
-		
 		return contents;
 	}
 	
 	/**
-	 * Extract sequence number from mail message (DATA only)
+	 * Extract sequence number from MailMessage (DATA MailMessage only)
 	 */
 	public int extractSeq(MailMessage mail) {
 		byte[] seq = new byte[SEQNUM];
@@ -575,7 +502,7 @@ public class NetCommandCenter extends PostOffice {
 	}
 	
 	/**
-	 * Extract buffer from MailMessage content array (DATA only)
+	 * Extract byte contents from MailMessage content array (DATA only)
 	 */
 	public byte[] extractBuffer(byte[] contents) {
 		if(contents == null)

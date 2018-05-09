@@ -1,17 +1,26 @@
 package nachos.network;
 
 /**
- * Contains all connection related info, including addresses, ports, and its state
+ * Contains all connection related info, including addresses, ports, and its state.
+ * NetProcess and NetCommandCenter can pass in this class to have the reference to
+ * the connection, making sending packets (or MailMessage in this case) easier
  */
 public class Connection {
 	public int srcLink, dstLink;
 	public int srcPort, dstPort;
 	public int state;
 	
-	// Connection states
+	/**
+	 * Connection states that are declared as "global" used by any class that
+	 * deals with Connection states (NetCommandCenter, ConnectionMap)
+	 */
 	public static final int CLOSED = -1, SYN_SENT = 0, SYN_RCVD = 1,
 			ESTABLISHED = 2, STP_SENT = 3, STP_RCVD = 4, CLOSING = 5;
 
+	/**
+	 * Takes in literal address and port of the both end of connection. A de facto
+	 * function for creating a Connection class
+	 */
 	public Connection(int srcLink, int dstLink, int srcPort, int dstPort, int state) {
 		this.srcLink = srcLink;
 		this.dstLink = dstLink;
@@ -22,7 +31,8 @@ public class Connection {
 
 	/**
 	 * Takes in mail as the main argument. mail is assumed to be the message that
-	 * was received, not sent, so Links and Ports are reversed.
+	 * was received, not sent, so Links and Ports are reversed. This function 
+	 * makes creating Connection easier by doing so.
 	 */
 	public Connection(MailMessage mail, int state) {
 		srcLink = mail.packet.dstLink; 
@@ -61,8 +71,7 @@ public class Connection {
 	public boolean equals(Object o) {
 		Connection c = (Connection) o;
 		return (srcLink == c.srcLink && dstLink == c.dstLink && srcPort == c.srcPort
-				&& dstPort == c.dstPort);// || (srcLink == c.dstLink && dstLink == c.srcLink
-				//&& srcPort == c.dstPort && dstPort == c.srcPort);
+				&& dstPort == c.dstPort);
 	}
 
 	@Override

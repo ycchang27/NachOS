@@ -20,8 +20,6 @@ public class NetProcess extends UserProcess {
 		super();
 		netManager = new NetCommandCenter();
 		socketList = new Socket[MAX_SOCKETS];
-		//lock = new Lock();
-		read = new Semaphore(0);
 	}
 	
 	/**
@@ -142,92 +140,31 @@ public class NetProcess extends UserProcess {
 	 * 
 	 */
 	private int handleRead(int fileDescriptor, int vaddr, int size) {
-		//Lock lock = new Lock();
-		boolean intStatus = Machine.interrupt().disable(); // calling ready() requires interrupts disabled
-		//System.out.println("read");
-		// Input statement
+		// Check if the read wants UserProcess's handleRead instead (used for C code
+		// statements like printf)
 		if(fileDescriptor == STDINPUT || fileDescriptor == STDOUTPUT) {
-			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return super.handleSyscall(syscallRead, fileDescriptor, vaddr, size, 0);
 		}
 		
 		// Return -1 if the input is invalid
 		if(size < 0 || (fileDescriptor >= MAX_SOCKETS || fileDescriptor < 0)
 				|| socketList[fileDescriptor] == null) {
-			//System.out.println("Invalid arguments");
-			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return -1;
 		}
 		
 		// Receive buffers from Socket
 		int bytesRead = 0;
-//		while(!socketList[fileDescriptor].readBuffer.isEmpty()) {
-//			// Get a buffer
-//			byte[] readBuffer = socketList[fileDescriptor].readBuffer.remove();
-//			
-//			// Size is less than the buffer size.
-//			if(size < bytesRead + readBuffer.length) {
-//				// Put back into the socket's readBuffer
-//				byte[] insertMe = new byte[readBuffer.length-size];
-//				System.arraycopy(readBuffer, size, insertMe, 0, readBuffer.length-size);
-//				socketList[fileDescriptor].readBuffer.addFirst(insertMe);
-//				
-//				// Write the remaining
-//				byte[] readMe = new byte[size-bytesRead];
-//				System.arraycopy(readBuffer, 0, readMe, 0, size-bytesRead);
-//				bytesRead += writeVirtualMemory(vaddr, readMe, 0, readMe.length);
-//				
-//				// Update number of bytes read
-//				socketList[fileDescriptor].bytesRead += bytesRead;
-//				return bytesRead;
-//			}
-//			
-//			// Write into the memory
-//			bytesRead += writeVirtualMemory(vaddr, readBuffer, 0, readBuffer.length);
-//		}
 		byte[] readBuffer = netManager.extractBuffer(netManager.receiveData(socketList[fileDescriptor].connection));
 		if(readBuffer != null) {
-			//System.out.println("buffer isn't null");
-			//System.out.println(new String(readBuffer));
+			// Print the read buffer and update number of bytes read
 			bytesRead +=fileList[STDOUTPUT].write(readBuffer, 0, readBuffer.length); 
-			//bytesRead +=fileList[STDINPUT].write(readBuffer, 0, readBuffer.length); 
-			//bytesRead += writeVirtualMemory(vaddr, readBuffer, 0, readBuffer.length);
 		}
-		// Receive buffers from data packets
-//		while(true) {
-//			// Get a buffer
-//			byte[] readBuffer = netManager.receiveData(socketList[fileDescriptor].connection);
-//			
-//			// Stop if there are no buffers avail
-//			if(readBuffer == null)
-//				break;
-//			
-//			// Size is less than the buffer size.
-//			if(size < bytesRead + readBuffer.length) {
-//				// Put back into the socket's readBuffer
-//				byte[] insertMe = new byte[readBuffer.length-size];
-//				System.arraycopy(readBuffer, size, insertMe, 0, readBuffer.length-size);
-//				socketList[fileDescriptor].readBuffer.addLast(insertMe);
-//
-//				// Write the remaining
-//				byte[] readMe = new byte[size-bytesRead];
-//				System.arraycopy(readBuffer, 0, readMe, 0, size-bytesRead);
-//				bytesRead += writeVirtualMemory(vaddr, readMe, 0, readMe.length);
-//				break;
-//			}
-//
-//			// Write into the memory
-//			bytesRead += writeVirtualMemory(vaddr, readBuffer, 0, readBuffer.length);
-//		}
-		
 		// Return error if nothing was written to the memory
 		if(bytesRead == 0)
 			return -1;
 		
 		// Update the number of bytes read
 		socketList[fileDescriptor].bytesRead += bytesRead;
-//		lock.release();
-		Machine.interrupt().restore(intStatus); // re-enable interrupts
 		return bytesRead;
 	}
 	
@@ -257,29 +194,24 @@ public class NetProcess extends UserProcess {
 	 * 
 	 */
 	private int handleWrite(int fileDescriptor, int vaddr, int size) {
-		boolean intStatus = Machine.interrupt().disable(); // calling ready() requires interrupts disabled
-		// Input statement
+		// Check if the read wants UserProcess's handleWrite instead
 		if(fileDescriptor == STDINPUT || fileDescriptor == STDOUTPUT) {
-			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return super.handleSyscall(syscallWrite, fileDescriptor, vaddr, size, 0);
 		}
 		
 		// Return -1 if the input is invalid
 		if(size < 0 || (fileDescriptor >= MAX_SOCKETS || fileDescriptor < 0)
 				|| socketList[fileDescriptor] == null) {
-			Machine.interrupt().restore(intStatus); // re-enable interrupts
 			return -1;
 		}
 		
-		// Count number of buffers to write
+		// Count number of buffers to write and get the write buffer
 		byte[] writeBuffer = new byte[size];
 		int bytesToSend = readVirtualMemory(vaddr, writeBuffer, 0, size);
 		
-		// Send the buffer
-		socketList[fileDescriptor].bytesSent += bytesToSend;
+		// Send the buffer and update the number of bytes sent
 		socketList[fileDescriptor].bytesSent = netManager.sendData(socketList[fileDescriptor].connection, writeBuffer, 
 				bytesToSend, socketList[fileDescriptor].bytesSent);
-		Machine.interrupt().restore(intStatus); // re-enable interrupts
 		return bytesToSend;
 	}
 	
@@ -295,28 +227,38 @@ public class NetProcess extends UserProcess {
 		return -1;
 	}
 
+	/**
+	 * syscall "enums"
+	 */
 	private static final int
 	syscallConnect = 11,
 	syscallAccept = 12;
-	
-	Lock lock;
-	Semaphore read;
 
+	// Centralized command for networking protocol
 	private NetCommandCenter netManager;
+	
+	// number of max sockets and socket list (just like in UserProcess with OpenFiles)
 	private final int MAX_SOCKETS = 16;
 	private Socket[] socketList;
 	
+	/**
+	 * A class that has all Connection related variables
+	 */
 	private class Socket extends OpenFile {
 		public Connection connection;
 		public int bytesSent;
 		public int bytesRead;
 		public Deque<byte[]> readBuffer;
+		
+		// Default constructor
 		public Socket() {
 			readBuffer = new LinkedList<byte[]>();
 			connection = null;
 			bytesSent = 0;
 			bytesRead = 0;
 		}
+		
+		// Constructor used in connect/accept
 		public Socket(Connection connection) {
 			readBuffer = new LinkedList<byte[]>();
 			this.connection = connection;
@@ -353,8 +295,7 @@ public class NetProcess extends UserProcess {
 		case syscallWrite:
 			return handleWrite(a0, a1, a2);
 		case syscallClose:
-			System.out.println("syscallClose");
-			Lib.assertNotReached("Unsupported Syscall");	// remove me when ready
+			Lib.assertNotReached("Unsupported Syscall");	// close is not implemented yet
 			// return handleClose(a0);
 		default:
 			return super.handleSyscall(syscall, a0, a1, a2, a3);
