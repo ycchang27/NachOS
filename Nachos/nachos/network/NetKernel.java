@@ -24,7 +24,7 @@ public class NetKernel extends UserKernel {
 		super.initialize(args);
 
 		postOffice = new PostOffice();
-		ncc = new NetCommandCenter();
+		ncc = new NetCommandCenter();	// used for selfTest/run
 	}
 
 	/**
@@ -39,6 +39,11 @@ public class NetKernel extends UserKernel {
 		// stalling to prepare other machines to run
 		System.out.println("Press any key to start the network test...");
 		console.readByte(true);
+		
+		/**
+		 * A simple test to verify NetCommandCenter's connect/accept protocol.
+		 * Currently commented out to do other testing
+		 */
 		
 //		int local = Machine.networkLink().getLinkAddress();
 //		
@@ -55,40 +60,64 @@ public class NetKernel extends UserKernel {
 
 	/**
 	 * Start running user programs.
+	 * To replicate the testing do the following:
+	 *  0) Before running, use "-d n" in run config arguments for better view.
+	 * 	1) Create 3 machine instances (3 consoles)
+	 *  2) Press any key in Network0
+	 *  3) Press any key in Network1
+	 *  4) Press any key in Network2
+	 *  5) Hope that the output doesn't fail (Current implementation suffers from synchronization
+	 *  issues)
 	 */
 	public void run() {
 		//super.run();
+		// C code testing for project 3 (copy and paste from project 2)
 		int local = Machine.networkLink().getLinkAddress();
 		
+		// Network0 testing
 		if(local == 0) {
+			// Create NetProcess
 			NetProcess process = NetProcess.newNetProcess();
 
+			// client = chat.c
 			String shellProgram = "client.coff";
 
-			// pass arguments for coff files here!!
+			// Pass arguments for coff file
 			String[] arguments = { "2", "15", "Tired...", ""+"Tired...".length()};
+			
+			// Run the program
 			Lib.assertTrue(process.execute(shellProgram, arguments));
 
 			KThread.currentThread().finish();
 		}
+		// Network 1 testing
 		else if(local == 1) {
+			// Create NetProcess
 			NetProcess process = NetProcess.newNetProcess();
 
+			// client = chat.c
 			String shellProgram = "client.coff";
 
-			// pass arguments for coff files here!!
+			// Pass arguments for coff file
 			String[] arguments = { "2", "15", "I am", ""+"I am".length() };
+			
+			// Run the program
 			Lib.assertTrue(process.execute(shellProgram, arguments));
 
 			KThread.currentThread().finish();
 		}
+		// Network 2 testing
 		else {
+			// Create NetProcess
 			NetProcess process = NetProcess.newNetProcess();
 
+			// host = chatserver.c
 			String shellProgram = "host.coff";
 
-			// pass arguments for coff files here!!
+			// Pass arguments for coff file
 			String[] arguments = { "15", ""+"Tired...".length(), ""+"I am".length() };
+			
+			// Run the program
 			Lib.assertTrue(process.execute(shellProgram, arguments));
 
 			KThread.currentThread().finish();
@@ -153,7 +182,7 @@ public class NetKernel extends UserKernel {
 	*/
 	// variables for selfTest
 	private PostOffice postOffice;
-	private NetCommandCenter ncc;
+	private NetCommandCenter ncc; // used for selfTest/run
 
 	// dummy variables to make javac smarter
 	private static NetProcess dummy1 = null;
