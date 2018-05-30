@@ -30,9 +30,9 @@ git clone https://github.com/ycchang27/CSE-150-OS.git
 
 5) Start Coding and Have "Fun"!!
 
-### Current Progress
+### ~~Current Progress
 
-We are currently working on *proj1* portion of the Nacho project.
+~~We are currently working on *proj1* portion of the Nacho project.
 
 ## Author(s)
 
