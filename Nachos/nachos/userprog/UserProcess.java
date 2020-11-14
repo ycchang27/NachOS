@@ -540,9 +540,9 @@ public class UserProcess {
 		if (parentProcess != null) 
 		{
 			//acquire the lock for the parent process
-			lock.acquire(); // LEX please check this
+			parentProcess.lock.acquire(); // LEX please check this
 			parentProcess.childProcessStatus.put(processID, status);
-			lock.release(); // LEX please check this
+			parentProcess.lock.release(); // LEX please check this
 
 		}
 		
