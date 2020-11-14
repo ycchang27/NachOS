@@ -219,7 +219,7 @@ public class UserProcess {
 		//start reading the memory
 		for (int i = Machine.processor().pageFromAddress(vaddr); i <= Machine.processor().pageFromAddress(end); i++) {
 			//break if the address is negative, exceeds the allowed range, empty, or referencing to invalid page
-			if ((i < 0 || i > pageTable.length) || pageTable == null || !pageTable[i].valid)
+			if ((i < 0 || i >= pageTable.length) || pageTable == null || !pageTable[i].valid)
 				break;
 			
 			//store the address of byte currently being referenced
