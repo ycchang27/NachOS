@@ -219,7 +219,7 @@ public class UserProcess {
 		//start reading the memory
 		for (int i = Machine.processor().pageFromAddress(vaddr); i <= Machine.processor().pageFromAddress(end); i++) {
 			//break if the address is negative, exceeds the allowed range, empty, or referencing to invalid page
-			if ((i < 0 || i > pageTable.length) || pageTable == null || !pageTable[i].valid)
+			if ((i < 0 || i >= pageTable.length) || pageTable == null || !pageTable[i].valid)
 				break;
 			
 			//store the address of byte currently being referenced
@@ -540,9 +540,9 @@ public class UserProcess {
 		if (parentProcess != null) 
 		{
 			//acquire the lock for the parent process
-			lock.acquire(); // LEX please check this
+			parentProcess.lock.acquire(); // LEX please check this
 			parentProcess.childProcessStatus.put(processID, status);
-			lock.release(); // LEX please check this
+			parentProcess.lock.release(); // LEX please check this
 
 		}
 		
@@ -1171,7 +1171,7 @@ public class UserProcess {
 	//PART 3 VARIABLES
 	protected UserProcess parentProcess; //hold parent process
 	protected LinkedList<UserProcess> childProcesses; //maintain list of child processes
-	private static Lock lock; //lock needed for implementation
+	private Lock lock; //lock needed for implementation
 	protected UThread thread; //thread needed for joining 
 	protected HashMap<Integer, Integer> childProcessStatus; //maintain child status
 	protected static int counter = 0; //needed to make process ID
