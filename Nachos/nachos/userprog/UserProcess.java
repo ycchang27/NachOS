@@ -1171,7 +1171,7 @@ public class UserProcess {
 	//PART 3 VARIABLES
 	protected UserProcess parentProcess; //hold parent process
 	protected LinkedList<UserProcess> childProcesses; //maintain list of child processes
-	private static Lock lock; //lock needed for implementation
+	private Lock lock; //lock needed for implementation
 	protected UThread thread; //thread needed for joining 
 	protected HashMap<Integer, Integer> childProcessStatus; //maintain child status
 	protected static int counter = 0; //needed to make process ID
